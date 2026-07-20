@@ -1,4 +1,5 @@
 import 'package:fluffychat/pages/unified_chat/unified_chat_view.dart';
+import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
@@ -73,7 +74,7 @@ class UnifiedChatController extends State<UnifiedChat> {
   }
 
   String labelForRoom(String roomId) =>
-      group?.roomLabels[roomId] ?? client.getRoomById(roomId)?.getLocalizedDisplayname() ?? roomId;
+      effectiveRoomLabel(client.getRoomById(roomId), group?.roomLabels[roomId]);
 
   void selectRoom(String? roomId) {
     if (roomId == null) return;

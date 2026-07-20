@@ -125,8 +125,10 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
                             ),
                           ),
                           ...group.roomIds.map((id) {
-                            final label = group.roomLabels[id] ??
-                                _roomDisplayName(client, id);
+                            final label = effectiveRoomLabel(
+                              client.getRoomById(id),
+                              group.roomLabels[id],
+                            );
                             return ListTile(
                               dense: true,
                               leading: FaIcon(
