@@ -1,6 +1,7 @@
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
@@ -56,7 +57,7 @@ class UnifiedChatView extends StatelessWidget {
                             if (!isMe) ...[
                               Tooltip(
                                 message: label,
-                                child: Icon(
+                                child: FaIcon(
                                   iconForBridgeLabel(label),
                                   size: 16,
                                   color: colorForBridgeLabel(label),
@@ -94,7 +95,7 @@ class UnifiedChatView extends StatelessWidget {
                               const SizedBox(width: 6),
                               Tooltip(
                                 message: label,
-                                child: Icon(
+                                child: FaIcon(
                                   iconForBridgeLabel(label),
                                   size: 16,
                                   color: colorForBridgeLabel(label),
@@ -120,7 +121,7 @@ class UnifiedChatView extends StatelessWidget {
                               value: roomId,
                               child: Tooltip(
                                 message: label,
-                                child: Icon(
+                                child: FaIcon(
                                   iconForBridgeLabel(label),
                                   color: colorForBridgeLabel(label),
                                 ),

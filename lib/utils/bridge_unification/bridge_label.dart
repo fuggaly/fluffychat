@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:matrix/matrix.dart';
 
 /// Derives a human-readable bridge label from a room's `m.bridge` state
@@ -35,13 +36,16 @@ String stripViaSuffix(String name) =>
 
 /// Icon (+ a brand-ish tint) for a bridge label, used wherever we'd
 /// otherwise show the network as text (the unified-conversation send
-/// dropdown, per-message badges). Generic Material icons rather than real
-/// brand marks - no new asset/font dependency for this.
-IconData iconForBridgeLabel(String label) => switch (label) {
-  'WhatsApp' => Icons.chat_outlined,
-  'Google Messages' => Icons.sms_outlined,
-  'Slack' => Icons.tag_outlined,
-  _ => Icons.forum_outlined,
+/// dropdown, per-message badges). WhatsApp has a real brand mark in
+/// FontAwesome; there's no "Google Messages" brand icon anywhere, but its
+/// dedicated SMS icon reads distinctly rather than reusing a generic chat
+/// bubble for both. Render with FaIcon (not the plain Material Icon
+/// widget) - required for FaIconData to display correctly.
+FaIconData iconForBridgeLabel(String label) => switch (label) {
+  'WhatsApp' => FontAwesomeIcons.whatsapp,
+  'Google Messages' => FontAwesomeIcons.commentSms,
+  'Slack' => FontAwesomeIcons.slack,
+  _ => FaIconData(Icons.forum_outlined),
 };
 
 Color colorForBridgeLabel(String label) => switch (label) {

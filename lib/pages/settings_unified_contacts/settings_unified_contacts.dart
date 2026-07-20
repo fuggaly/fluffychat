@@ -7,6 +7,7 @@ import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.
 import 'package:fluffychat/widgets/adaptive_dialogs/show_text_input_dialog.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:matrix/matrix.dart';
 
@@ -128,7 +129,7 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
                                 _roomDisplayName(client, id);
                             return ListTile(
                               dense: true,
-                              leading: Icon(
+                              leading: FaIcon(
                                 iconForBridgeLabel(label),
                                 color: colorForBridgeLabel(label),
                               ),
