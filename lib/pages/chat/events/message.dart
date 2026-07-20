@@ -53,6 +53,21 @@ class Message extends StatelessWidget {
   final bool isCollapsed;
   final Set<String> bigEmojis;
 
+  /// Overrides the sender-name text shown above a message (and forces it
+  /// visible even in a direct chat, where it's normally rendered
+  /// transparent-but-still-laid-out). Used by the unified/merged bridge
+  /// conversation view to show the shared contact's name instead of the
+  /// bridge ghost user's own per-room "Contact via WhatsApp"-style
+  /// displayname. Has no effect on any other call site, which all leave
+  /// this null.
+  final String? senderNameOverride;
+
+  /// An optional small icon rendered immediately before the timestamp,
+  /// e.g. to indicate which bridged network a message in a merged
+  /// conversation came through. Null everywhere except the unified chat
+  /// view.
+  final Widget? networkIcon;
+
   const Message(
     this.event, {
     this.nextEvent,
@@ -77,6 +92,8 @@ class Message extends StatelessWidget {
     this.onExpand,
     required this.enterThread,
     this.isCollapsed = false,
+    this.senderNameOverride,
+    this.networkIcon,
     super.key,
   });
 
@@ -348,8 +365,11 @@ class Message extends StatelessWidget {
                                       future: event.fetchSenderUser(),
                                       builder: (context, snapshot) {
                                         final displayname =
+                                            senderNameOverride ??
                                             snapshot.data?.calcDisplayname() ??
                                             sender.calcDisplayname();
+                                        final forceVisible =
+                                            senderNameOverride != null;
                                         return ConstrainedBox(
                                           constraints: BoxConstraints(
                                             maxWidth: 200,
@@ -358,7 +378,9 @@ class Message extends StatelessWidget {
                                             displayname,
                                             style: TextStyle(
                                               fontWeight: FontWeight.bold,
-                                              color: event.room.isDirectChat
+                                              color:
+                                                  (!forceVisible &&
+                                                      event.room.isDirectChat)
                                                   ? Colors.transparent
                                                   : (theme.brightness ==
                                                             Brightness.light
@@ -528,6 +550,10 @@ class Message extends StatelessWidget {
                               mainAxisAlignment: ownMessage ? .end : .start,
                               children: [
                                 const SizedBox(width: 8),
+                                if (networkIcon != null) ...[
+                                  networkIcon!,
+                                  const SizedBox(width: 4),
+                                ],
                                 if (event.status.isSent &&
                                     (displayTime ||
                                         !previousEventSameSender ||

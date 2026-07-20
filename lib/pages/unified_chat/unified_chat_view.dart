@@ -75,8 +75,6 @@ class UnifiedChatView extends StatelessWidget {
                               ? events[i + 1]
                               : null;
                           final previousEvent = i > 0 ? events[i - 1] : null;
-                          final isMe =
-                              event.senderId == controller.client.userID;
                           final label = controller.labelForRoom(event.room.id);
                           final timeline = controller.timelineForEvent(event);
 
@@ -124,94 +122,51 @@ class UnifiedChatView extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                              Center(
-                                child: ConstrainedBox(
-                                  // Message internally caps its own bubble
-                                  // at FluffyThemes.maxTimelineWidth and
-                                  // centers itself within whatever width
-                                  // it's given - on windows wider than that
-                                  // cap, that left the network icon (a
-                                  // sibling placed at the true row edge)
-                                  // stranded far from the visually-centered
-                                  // bubble. Capping and centering this
-                                  // icon+bubble pair as one unit keeps them
-                                  // adjacent while still matching a normal
-                                  // room's centered-column look on wide
-                                  // windows.
-                                  constraints: const BoxConstraints(
-                                    maxWidth:
-                                        FluffyThemes.maxTimelineWidth + 40,
-                                  ),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    mainAxisAlignment: isMe
-                                        ? MainAxisAlignment.end
-                                        : MainAxisAlignment.start,
-                                    children: [
-                                      if (!isMe) ...[
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            left: 12,
-                                            bottom: 8,
-                                          ),
-                                          child: Tooltip(
-                                            message: label,
-                                            child: FaIcon(
-                                              iconForBridgeLabel(label),
-                                              size: 16,
-                                              color: colorForBridgeLabel(
-                                                label,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      Expanded(
-                                        child: Message(
-                                          event,
-                                          timeline: timeline,
-                                          nextEvent: nextEvent,
-                                          previousEvent: previousEvent,
-                                          bigEmojis: controller.bigEmojis,
-                                          colors: colors,
-                                          scrollController:
-                                              controller.scrollController,
-                                          // Interactive features (reactions,
-                                          // editing, threads, swipe-to-reply,
-                                          // selection, mentions) aren't wired
-                                          // up in the merged view - only
-                                          // rendering parity was asked for.
-                                          onSelect: (_) {},
-                                          onInfoTab: (_) {},
-                                          scrollToEventId: (_) {},
-                                          onSwipe: () {},
-                                          onMention: () {},
-                                          onEdit: () {},
-                                          enterThread: null,
-                                          singleSelected: false,
-                                        ),
-                                      ),
-                                      if (isMe) ...[
-                                        Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 12,
-                                            bottom: 8,
-                                          ),
-                                          child: Tooltip(
-                                            message: label,
-                                            child: FaIcon(
-                                              iconForBridgeLabel(label),
-                                              size: 16,
-                                              color: colorForBridgeLabel(
-                                                label,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
+                              Message(
+                                event,
+                                timeline: timeline,
+                                nextEvent: nextEvent,
+                                previousEvent: previousEvent,
+                                bigEmojis: controller.bigEmojis,
+                                colors: colors,
+                                scrollController: controller.scrollController,
+                                // The real per-room sender displayname for
+                                // a bridge ghost is literally "Contact via
+                                // WhatsApp"/"Contact via SMS" - show the
+                                // group's own already-deduped contact name
+                                // instead, and force it visible (Message
+                                // normally renders it transparent-but-still
+                                // -laid-out in a direct chat).
+                                senderNameOverride: group.label,
+                                // Placed right before the timestamp inside
+                                // Message's own metadata row rather than as
+                                // a sibling alongside the bubble, so it
+                                // never drifts away from the bubble on wide
+                                // windows and still shows even on messages
+                                // where the timestamp itself is suppressed
+                                // (consecutive same-sender messages sent
+                                // within the same time bucket).
+                                networkIcon: Tooltip(
+                                  message: label,
+                                  child: FaIcon(
+                                    iconForBridgeLabel(label),
+                                    size: 12,
+                                    color: colorForBridgeLabel(label),
                                   ),
                                 ),
+                                // Interactive features (reactions, editing,
+                                // threads, swipe-to-reply, selection,
+                                // mentions) aren't wired up in the merged
+                                // view - only rendering parity was asked
+                                // for.
+                                onSelect: (_) {},
+                                onInfoTab: (_) {},
+                                scrollToEventId: (_) {},
+                                onSwipe: () {},
+                                onMention: () {},
+                                onEdit: () {},
+                                enterThread: null,
+                                singleSelected: false,
                               ),
                             ],
                           );
