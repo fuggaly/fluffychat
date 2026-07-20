@@ -1,3 +1,4 @@
+import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:fluffychat/pages/unified_chat/unified_chat_view.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
@@ -24,11 +25,27 @@ class UnifiedChat extends StatefulWidget {
 class UnifiedChatController extends State<UnifiedChat> {
   final Map<String, Timeline> timelines = {};
   final TextEditingController sendController = TextEditingController();
+  final ScrollController scrollController = ScrollController();
   bool loading = true;
   String? selectedRoomId;
   bool _timelinesRequested = false;
 
+  // Same computation ChatController itself uses (large-emoji-only
+  // messages render bigger) - reused as-is so message rendering styling
+  // matches a normal room exactly, per the point of reusing the real
+  // Message widget here at all.
+  late final Set<String> bigEmojis = defaultEmojiSet.fold(
+    <String>{},
+    (emojis, category) => {...emojis, ...category.emoji.map((e) => e.emoji)},
+  );
+
   Client get client => Matrix.of(context).client;
+
+  /// The Timeline a merged event's own bridge room belongs to - Message
+  /// needs this (e.g. to resolve edits via getDisplayEvent), and since
+  /// events here come from N different rooms' timelines, it can't just be
+  /// one fixed timeline like a normal single-room chat view.
+  Timeline? timelineForEvent(Event event) => timelines[event.room.id];
 
   UnifiedContactGroup? get group =>
       UnifiedContactsService.groupById(client, widget.groupId);
@@ -54,9 +71,11 @@ class UnifiedChatController extends State<UnifiedChat> {
     for (final roomId in currentGroup.roomIds) {
       final room = client.getRoomById(roomId);
       if (room == null) continue;
-      timelines[roomId] = await room.getTimeline(onUpdate: () {
-        if (mounted) setState(() {});
-      });
+      timelines[roomId] = await room.getTimeline(
+        onUpdate: () {
+          if (mounted) setState(() {});
+        },
+      );
     }
 
     if (!mounted) return;
@@ -96,7 +115,11 @@ class UnifiedChatController extends State<UnifiedChat> {
 
     // ignore: unawaited_futures
     room.sendTextEvent(body);
-    await UnifiedContactsService.setLastUsedRoom(client, currentGroup.id, roomId);
+    await UnifiedContactsService.setLastUsedRoom(
+      client,
+      currentGroup.id,
+      roomId,
+    );
   }
 
   Future<void> scheduleSend() async {
@@ -125,7 +148,11 @@ class UnifiedChatController extends State<UnifiedChat> {
     final body = sendController.text;
 
     try {
-      await SchedulerApiClient().create(roomId: roomId, body: body, sendAt: sendAt);
+      await SchedulerApiClient().create(
+        roomId: roomId,
+        body: body,
+        sendAt: sendAt,
+      );
     } on SchedulerApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -134,11 +161,19 @@ class UnifiedChatController extends State<UnifiedChat> {
       return;
     }
 
-    await UnifiedContactsService.setLastUsedRoom(client, currentGroup.id, roomId);
+    await UnifiedContactsService.setLastUsedRoom(
+      client,
+      currentGroup.id,
+      roomId,
+    );
     if (!mounted) return;
     sendController.clear();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Message scheduled for $sendAt via ${labelForRoom(roomId)}')),
+      SnackBar(
+        content: Text(
+          'Message scheduled for $sendAt via ${labelForRoom(roomId)}',
+        ),
+      ),
     );
     setState(() {});
   }
@@ -146,6 +181,7 @@ class UnifiedChatController extends State<UnifiedChat> {
   @override
   void dispose() {
     sendController.dispose();
+    scrollController.dispose();
     super.dispose();
   }
 

@@ -1,10 +1,12 @@
+import 'package:fluffychat/config/app_config.dart';
+import 'package:fluffychat/config/themes.dart';
+import 'package:fluffychat/pages/chat/events/message.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
-import 'package:fluffychat/widgets/matrix.dart';
+import 'package:fluffychat/utils/date_time_extension.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import 'unified_chat.dart';
 
@@ -20,7 +22,9 @@ class UnifiedChatView extends StatelessWidget {
     if (group == null) {
       return Scaffold(
         appBar: AppBar(leading: BackButton(onPressed: context.pop)),
-        body: const Center(child: Text('This unified contact no longer exists.')),
+        body: const Center(
+          child: Text('This unified contact no longer exists.'),
+        ),
       );
     }
 
@@ -36,9 +40,7 @@ class UnifiedChatView extends StatelessWidget {
               size: 32,
             ),
             const SizedBox(width: 12),
-            Flexible(
-              child: Text(group.label, overflow: TextOverflow.ellipsis),
-            ),
+            Flexible(child: Text(group.label, overflow: TextOverflow.ellipsis)),
           ],
         ),
       ),
@@ -47,77 +49,146 @@ class UnifiedChatView extends StatelessWidget {
           : Column(
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    reverse: true,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: controller.mergedEvents.length,
-                    itemBuilder: (context, i) {
-                      final event = controller.mergedEvents[i];
-                      final client = Matrix.of(context).client;
-                      final isMe = event.senderId == client.userID;
-                      final label = controller.labelForRoom(event.room.id);
+                  child: Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      // Same fixed 2-color palette ChatController's own
+                      // event list uses (see chat_event_list.dart) - kept
+                      // identical so bubble styling matches exactly.
+                      final colors = [
+                        theme.secondaryBubbleColor,
+                        theme.bubbleColor,
+                      ];
+                      final events = controller.mergedEvents;
 
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 4,
-                        ),
-                        child: Row(
-                          mainAxisAlignment: isMe
-                              ? MainAxisAlignment.end
-                              : MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (!isMe) ...[
-                              Tooltip(
-                                message: label,
-                                child: FaIcon(
-                                  iconForBridgeLabel(label),
-                                  size: 16,
-                                  color: colorForBridgeLabel(label),
+                      return ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: events.length,
+                        itemBuilder: (context, i) {
+                          final event = events[i];
+                          // Same index convention as chat_event_list.dart:
+                          // events are newest-first, so index i+1 is the
+                          // older (chronologically "next") neighbour and
+                          // i-1 is the newer ("previous") one.
+                          final nextEvent = i + 1 < events.length
+                              ? events[i + 1]
+                              : null;
+                          final previousEvent = i > 0 ? events[i - 1] : null;
+                          final isMe =
+                              event.senderId == controller.client.userID;
+                          final label = controller.labelForRoom(event.room.id);
+                          final timeline = controller.timelineForEvent(event);
+
+                          final displayDate =
+                              nextEvent == null ||
+                              !event.originServerTs.sameDay(
+                                nextEvent.originServerTs,
+                              );
+
+                          if (timeline == null) return const SizedBox.shrink();
+
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (displayDate)
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: 8.0,
+                                    bottom: 16.0,
+                                  ),
+                                  child: Center(
+                                    child: Material(
+                                      borderRadius: BorderRadius.circular(
+                                        AppConfig.borderRadius * 2,
+                                      ),
+                                      color: theme.colorScheme.inverseSurface
+                                          .withAlpha(200),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8.0,
+                                          vertical: 2.0,
+                                        ),
+                                        child: Text(
+                                          event.originServerTs.localizedDate(
+                                            context,
+                                          ),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: theme
+                                                .colorScheme
+                                                .onInverseSurface,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
-                            Flexible(
-                              child: Column(
-                                crossAxisAlignment: isMe
-                                    ? CrossAxisAlignment.end
-                                    : CrossAxisAlignment.start,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
+                                  if (!isMe) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        left: 12,
+                                        bottom: 8,
+                                      ),
+                                      child: Tooltip(
+                                        message: label,
+                                        child: FaIcon(
+                                          iconForBridgeLabel(label),
+                                          size: 16,
+                                          color: colorForBridgeLabel(label),
+                                        ),
+                                      ),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: isMe
-                                          ? Theme.of(context).colorScheme.primaryContainer
-                                          : Theme.of(context).colorScheme.surfaceContainerHigh,
-                                      borderRadius: BorderRadius.circular(12),
+                                  ],
+                                  Expanded(
+                                    child: Message(
+                                      event,
+                                      timeline: timeline,
+                                      nextEvent: nextEvent,
+                                      previousEvent: previousEvent,
+                                      bigEmojis: controller.bigEmojis,
+                                      colors: colors,
+                                      scrollController:
+                                          controller.scrollController,
+                                      // Interactive features (reactions,
+                                      // editing, threads, swipe-to-reply,
+                                      // selection, mentions) aren't wired
+                                      // up in the merged view - only
+                                      // rendering parity was asked for.
+                                      onSelect: (_) {},
+                                      onInfoTab: (_) {},
+                                      scrollToEventId: (_) {},
+                                      onSwipe: () {},
+                                      onMention: () {},
+                                      onEdit: () {},
+                                      enterThread: null,
+                                      singleSelected: false,
                                     ),
-                                    child: Text(event.body),
                                   ),
-                                  Text(
-                                    DateFormat.Hm().format(event.originServerTs),
-                                    style: Theme.of(context).textTheme.labelSmall,
-                                  ),
+                                  if (isMe) ...[
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        right: 12,
+                                        bottom: 8,
+                                      ),
+                                      child: Tooltip(
+                                        message: label,
+                                        child: FaIcon(
+                                          iconForBridgeLabel(label),
+                                          size: 16,
+                                          color: colorForBridgeLabel(label),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
-                            ),
-                            if (isMe) ...[
-                              const SizedBox(width: 6),
-                              Tooltip(
-                                message: label,
-                                child: FaIcon(
-                                  iconForBridgeLabel(label),
-                                  size: 16,
-                                  color: colorForBridgeLabel(label),
-                                ),
-                              ),
                             ],
-                          ],
-                        ),
+                          );
+                        },
                       );
                     },
                   ),
