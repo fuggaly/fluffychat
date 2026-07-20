@@ -35,6 +35,9 @@ class _SettingsDelaySendState extends State<SettingsDelaySend> {
       _tokenController.text = token ?? '';
       _loading = false;
     });
+    if (url != null && url.isNotEmpty && token != null && token.isNotEmpty) {
+      await _loadPending();
+    }
   }
 
   Future<void> _save() async {
