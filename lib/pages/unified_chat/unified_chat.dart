@@ -1,13 +1,21 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:fluffychat/pages/chat/chat.dart' show AddPopupMenuActions;
+import 'package:fluffychat/pages/chat/send_file_dialog.dart';
+import 'package:fluffychat/pages/chat/send_location_dialog.dart';
+import 'package:fluffychat/pages/chat/start_poll_bottom_sheet.dart';
 import 'package:fluffychat/pages/unified_chat/unified_chat_view.dart';
+import 'package:fluffychat/utils/adaptive_bottom_sheet.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_config.dart';
+import 'package:fluffychat/utils/file_selector.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
 
 /// A merged view of a unified-contact group's member rooms, presented as
@@ -26,9 +34,15 @@ class UnifiedChatController extends State<UnifiedChat> {
   final Map<String, Timeline> timelines = {};
   final TextEditingController sendController = TextEditingController();
   final ScrollController scrollController = ScrollController();
+  final FocusNode inputFocus = FocusNode();
   bool loading = true;
   String? selectedRoomId;
   bool _timelinesRequested = false;
+
+  /// Triggers a rebuild as the composer text changes, so the attach
+  /// button's hide-while-typing animation (see UnifiedChatInputRow)
+  /// reacts the same way ChatInputRow's does.
+  void onInputChanged() => setState(() {});
 
   // Same computation ChatController itself uses (large-emoji-only
   // messages render bigger) - reused as-is so message rendering styling
@@ -49,6 +63,15 @@ class UnifiedChatController extends State<UnifiedChat> {
 
   UnifiedContactGroup? get group =>
       UnifiedContactsService.groupById(client, widget.groupId);
+
+  /// The room currently picked in the network dropdown - attachments,
+  /// location, polls and emoji/stickers all target this room, same as a
+  /// normal room's composer targets its one room.
+  Room? get selectedRoom {
+    final roomId = selectedRoomId;
+    if (roomId == null) return null;
+    return client.getRoomById(roomId);
+  }
 
   @override
   void didChangeDependencies() {
@@ -202,10 +225,136 @@ class UnifiedChatController extends State<UnifiedChat> {
     setState(() {});
   }
 
+  bool showEmojiPicker = false;
+
+  void emojiPickerAction() =>
+      setState(() => showEmojiPicker = !showEmojiPicker);
+
+  void hideEmojiPicker() => setState(() => showEmojiPicker = false);
+
+  void onEmojiSelected(_, Emoji? emoji) {
+    if (emoji == null) return;
+    final text = sendController.text;
+    final selection = sendController.selection;
+    final newText = text.isEmpty
+        ? emoji.emoji
+        : text.replaceRange(selection.start, selection.end, emoji.emoji);
+    sendController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(
+        offset: selection.baseOffset + emoji.emoji.length,
+      ),
+    );
+  }
+
+  void emojiPickerBackspace() {
+    sendController
+      ..text = sendController.text.characters.skipLast(1).toString()
+      ..selection = TextSelection.fromPosition(
+        TextPosition(offset: sendController.text.length),
+      );
+  }
+
+  Future<void> sendFileAction({FileType type = FileType.any}) async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final files = await selectFiles(context, allowMultiple: true, type: type);
+    if (files.isEmpty) return;
+    if (!mounted) return;
+    await showAdaptiveDialog(
+      context: context,
+      builder: (c) => SendFileDialog(
+        files: files,
+        room: room,
+        outerContext: context,
+        threadRootEventId: null,
+        threadLastEventId: null,
+      ),
+    );
+  }
+
+  Future<void> openCameraAction() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final file = await ImagePicker().pickImage(source: ImageSource.camera);
+    if (file == null || !mounted) return;
+    await showAdaptiveDialog(
+      context: context,
+      builder: (c) => SendFileDialog(
+        files: [file],
+        room: room,
+        outerContext: context,
+        threadRootEventId: null,
+        threadLastEventId: null,
+      ),
+    );
+  }
+
+  Future<void> openVideoCameraAction() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    final file = await ImagePicker().pickVideo(
+      source: ImageSource.camera,
+      maxDuration: const Duration(minutes: 1),
+    );
+    if (file == null || !mounted) return;
+    await showAdaptiveDialog(
+      context: context,
+      builder: (c) => SendFileDialog(
+        files: [file],
+        room: room,
+        outerContext: context,
+        threadRootEventId: null,
+        threadLastEventId: null,
+      ),
+    );
+  }
+
+  Future<void> sendLocationAction() async {
+    final room = selectedRoom;
+    if (room == null) return;
+    await showAdaptiveDialog(
+      context: context,
+      builder: (c) => SendLocationDialog(room: room),
+    );
+  }
+
+  void onAddPopupMenuButtonSelected(AddPopupMenuActions choice) {
+    switch (choice) {
+      case AddPopupMenuActions.image:
+        sendFileAction(type: FileType.image);
+        return;
+      case AddPopupMenuActions.video:
+        sendFileAction(type: FileType.video);
+        return;
+      case AddPopupMenuActions.file:
+        sendFileAction();
+        return;
+      case AddPopupMenuActions.poll:
+        final room = selectedRoom;
+        if (room == null) return;
+        showAdaptiveBottomSheet(
+          context: context,
+          builder: (context) => StartPollBottomSheet(room: room),
+        );
+        return;
+      case AddPopupMenuActions.photoCamera:
+        openCameraAction();
+        return;
+      case AddPopupMenuActions.videoCamera:
+        openVideoCameraAction();
+        return;
+      case AddPopupMenuActions.location:
+        sendLocationAction();
+        return;
+    }
+  }
+
   @override
   void dispose() {
     sendController.dispose();
     scrollController.dispose();
+    inputFocus.dispose();
     super.dispose();
   }
 

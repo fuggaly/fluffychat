@@ -10,6 +10,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 
 import 'unified_chat.dart';
+import 'unified_chat_emoji_picker.dart';
+import 'unified_chat_input_row.dart';
 
 class UnifiedChatView extends StatelessWidget {
   final UnifiedChatController controller;
@@ -213,45 +215,40 @@ class UnifiedChatView extends StatelessWidget {
                   ),
                 ),
                 SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        DropdownButton<String>(
-                          value: controller.selectedRoomId,
-                          items: group.roomIds.map((roomId) {
-                            final label = controller.labelForRoom(roomId);
-                            return DropdownMenuItem(
-                              value: roomId,
-                              child: Tooltip(
-                                message: label,
-                                child: FaIcon(
-                                  iconForBridgeLabel(label),
-                                  color: colorForBridgeLabel(label),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: controller.selectRoom,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: controller.sendController,
-                            decoration: const InputDecoration(
-                              hintText: 'Send a message...',
+                  child: Builder(
+                    builder: (context) {
+                      final theme = Theme.of(context);
+                      // Same pill-shaped, centered, width-capped composer
+                      // chat_view.dart wraps ChatInputRow/ChatEmojiPicker
+                      // in, so a merged conversation's input area matches
+                      // a normal room's exactly.
+                      final bottomSheetPadding = FluffyThemes.isColumnMode(
+                        context,
+                      )
+                          ? 16.0
+                          : 8.0;
+                      return Align(
+                        alignment: Alignment.center,
+                        child: Container(
+                          margin: EdgeInsets.all(bottomSheetPadding),
+                          constraints: const BoxConstraints(
+                            maxWidth: FluffyThemes.maxTimelineWidth,
+                          ),
+                          child: Material(
+                            clipBehavior: Clip.hardEdge,
+                            color: theme.colorScheme.surfaceContainer,
+                            borderRadius: BorderRadius.circular(32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                UnifiedChatInputRow(controller),
+                                UnifiedChatEmojiPicker(controller),
+                              ],
                             ),
-                            onSubmitted: (_) => controller.send(),
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Send (long-press to schedule)',
-                          icon: const Icon(Icons.send_outlined),
-                          onPressed: controller.send,
-                          onLongPress: controller.scheduleSend,
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   ),
                 ),
               ],
