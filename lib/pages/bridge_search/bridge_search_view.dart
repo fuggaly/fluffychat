@@ -15,6 +15,22 @@ class BridgeSearchView extends StatelessWidget {
       appBar: AppBar(
         leading: BackButton(onPressed: context.pop),
         title: const Text('Search contacts'),
+        actions: controller.loading || controller.bridges.isEmpty
+            ? null
+            : [
+                PopupMenuButton(
+                  tooltip: 'Resync contacts',
+                  icon: const Icon(Icons.sync_outlined),
+                  itemBuilder: (context) => controller.bridges
+                      .map(
+                        (bridge) => PopupMenuItem(
+                          onTap: () => controller.syncContacts(bridge),
+                          child: Text('Resync ${bridge.label} contacts'),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator.adaptive())

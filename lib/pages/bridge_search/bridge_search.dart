@@ -99,6 +99,21 @@ class BridgeSearchController extends State<BridgeSearch> {
     });
   }
 
+  Future<void> syncContacts(ConfiguredBridge bridge) async {
+    final result = await showFutureLoadingDialog(
+      context: context,
+      future: () => _relayClient.syncContacts(bridge.id, bridge.label),
+    );
+    if (result.error != null || !mounted) return;
+    // Cached contacts (used for the contacts-list search fallback, e.g.
+    // Google Messages) are now stale - drop them so the next search
+    // re-fetches.
+    _contactsCache.remove(bridge.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${bridge.label} contact sync triggered.')),
+    );
+  }
+
   Future<void> startChat(BridgeSearchResult result) async {
     final roomId = await showFutureLoadingDialog(
       context: context,

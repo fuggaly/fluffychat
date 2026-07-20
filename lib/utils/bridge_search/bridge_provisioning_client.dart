@@ -148,6 +148,21 @@ class BridgeProvisioningClient {
     return json['dm_room_mxid'] as String;
   }
 
+  /// Triggers the bridge's own contact resync (e.g. WhatsApp's "sync
+  /// contacts" admin command) via the relay, without needing interactive
+  /// access to @bridgehub's session. Useful when a contact known to exist
+  /// on the linked phone doesn't show up in search - most likely because
+  /// sync hasn't run since they were added.
+  Future<void> syncContacts(String bridgeId, String bridgeLabel) async {
+    final res = await http.post(
+      await _uri('/bridges/$bridgeId/sync_contacts'),
+      headers: await _authHeaders(),
+    );
+    if (res.statusCode != 200) {
+      throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
+    }
+  }
+
   String _errorMessage(http.Response res) {
     try {
       final json = jsonDecode(res.body);
