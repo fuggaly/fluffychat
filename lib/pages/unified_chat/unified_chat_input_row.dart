@@ -155,30 +155,46 @@ class UnifiedChatInputRow extends StatelessWidget {
             onPressed: controller.emojiPickerAction,
           ),
         ),
-        Container(
-          height: height,
-          width: 48,
-          alignment: Alignment.center,
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: controller.selectedRoomId,
-              items: group.roomIds.map((roomId) {
-                final label = controller.labelForRoom(roomId);
-                return DropdownMenuItem(
-                  value: roomId,
-                  child: Tooltip(
-                    message: label,
-                    child: FaIcon(
-                      iconForBridgeLabel(label),
-                      size: 18,
-                      color: colorForBridgeLabel(label),
+        Builder(
+          builder: (context) {
+            final selectedRoomId =
+                controller.selectedRoomId ?? group.defaultRoomId;
+            final selectedLabel = controller.labelForRoom(selectedRoomId);
+            return Container(
+              height: height,
+              width: 48,
+              alignment: Alignment.center,
+              // A plain PopupMenuButton, same as the attach button above -
+              // gives the same circular hover highlight as every other
+              // icon in this row (a bare DropdownButton draws its own
+              // rectangular Material highlight instead) and a proper
+              // labeled menu instead of an unlabeled row of tiny icons.
+              child: PopupMenuButton<String>(
+                useRootNavigator: true,
+                tooltip: selectedLabel,
+                icon: FaIcon(
+                  iconForBridgeLabel(selectedLabel),
+                  size: 18,
+                  color: colorForBridgeLabel(selectedLabel),
+                ),
+                onSelected: controller.selectRoom,
+                itemBuilder: (context) => group.roomIds.map((roomId) {
+                  final label = controller.labelForRoom(roomId);
+                  return PopupMenuItem(
+                    value: roomId,
+                    child: ListTile(
+                      leading: FaIcon(
+                        iconForBridgeLabel(label),
+                        color: colorForBridgeLabel(label),
+                      ),
+                      title: Text(label),
+                      contentPadding: const EdgeInsets.all(0),
                     ),
-                  ),
-                );
-              }).toList(),
-              onChanged: controller.selectRoom,
-            ),
-          ),
+                  );
+                }).toList(),
+              ),
+            );
+          },
         ),
         Expanded(
           child: Padding(
