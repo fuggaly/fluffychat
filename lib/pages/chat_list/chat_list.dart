@@ -157,15 +157,22 @@ class ChatListController extends State<ChatList>
     }
   }
 
-  List<Room> get filteredRooms => Matrix.of(context)
-      .client
-      .rooms
-      .where(getRoomFilterByActiveFilter(activeFilter))
-      // Bridge admin/management-room DMs (e.g. @whatsappbot) aren't
-      // conversations - hide them the same way autobot.mjs's own
-      // IGNORE_ROOMS does server-side.
-      .where((room) => !isBridgeManagementRoom(room))
-      .toList();
+  List<Room> get filteredRooms {
+    final client = Matrix.of(context).client;
+    return client.rooms
+        .where(getRoomFilterByActiveFilter(activeFilter))
+        // Bridge admin/management-room DMs (e.g. @whatsappbot) aren't
+        // conversations - hide them the same way autobot.mjs's own
+        // IGNORE_ROOMS does server-side.
+        .where((room) => !isBridgeManagementRoom(room))
+        // Rooms merged into a unified contact are represented by the
+        // synthetic "Unified Conversations" section instead (see
+        // ChatListViewBody) - hide the individual member rooms here so
+        // they don't also show up separately. Still reachable
+        // individually via Settings > Unified Contacts.
+        .where((room) => UnifiedContactsService.groupForRoom(client, room.id) == null)
+        .toList();
+  }
 
   bool isSearchMode = false;
   Future<QueryPublicRoomsResponse>? publicRoomsResponse;

@@ -7,6 +7,7 @@ import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.
 import 'package:fluffychat/widgets/adaptive_dialogs/show_text_input_dialog.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:matrix/matrix.dart';
 
 class SettingsUnifiedContacts extends StatefulWidget {
@@ -21,7 +22,7 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
   String _roomDisplayName(Client client, String roomId) {
     final room = client.getRoomById(roomId);
     if (room == null) return roomId;
-    return room.getLocalizedDisplayname();
+    return stripViaSuffix(room.getLocalizedDisplayname());
   }
 
   Future<void> _createGroup() async {
@@ -39,7 +40,9 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
       context: context,
       title: 'Name this unified contact',
       hintText: 'e.g. a person\'s name',
-      initialText: firstRoom?.getLocalizedDisplayname(),
+      initialText: firstRoom == null
+          ? null
+          : stripViaSuffix(firstRoom.getLocalizedDisplayname()),
     );
     if (label == null || label.trim().isEmpty) return;
 
@@ -48,7 +51,7 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
       final room = client.getRoomById(roomId);
       if (room == null) continue;
       roomLabels[roomId] =
-          bridgeLabelForRoom(room) ?? room.getLocalizedDisplayname();
+          bridgeLabelForRoom(room) ?? stripViaSuffix(room.getLocalizedDisplayname());
     }
 
     await UnifiedContactsService.createGroup(
@@ -106,22 +109,36 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
               children: groups
                   .map(
                     (group) => Card(
-                      child: ListTile(
-                        title: Text(group.label),
-                        subtitle: Text(
-                          group.roomIds
-                              .map(
-                                (id) =>
-                                    group.roomLabels[id] ??
-                                    _roomDisplayName(client, id),
-                              )
-                              .join(' • '),
-                        ),
-                        trailing: IconButton(
-                          tooltip: 'Un-merge',
-                          icon: const Icon(Icons.close_outlined),
-                          onPressed: () => _deleteGroup(group),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ListTile(
+                            title: Text(group.label),
+                            subtitle: const Text(
+                              'Tap a room below to open it individually (not merged)',
+                            ),
+                            trailing: IconButton(
+                              tooltip: 'Un-merge',
+                              icon: const Icon(Icons.close_outlined),
+                              onPressed: () => _deleteGroup(group),
+                            ),
+                          ),
+                          ...group.roomIds.map((id) {
+                            final label = group.roomLabels[id] ??
+                                _roomDisplayName(client, id);
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                iconForBridgeLabel(label),
+                                color: colorForBridgeLabel(label),
+                              ),
+                              title: Text(label),
+                              subtitle: Text(_roomDisplayName(client, id)),
+                              trailing: const Icon(Icons.chevron_right_outlined),
+                              onTap: () => context.go('/rooms/$id'),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                   )

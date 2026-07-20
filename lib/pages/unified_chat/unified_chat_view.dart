@@ -1,3 +1,4 @@
+import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -46,57 +47,60 @@ class UnifiedChatView extends StatelessWidget {
                           horizontal: 12,
                           vertical: 4,
                         ),
-                        child: Column(
-                          crossAxisAlignment: isMe
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.start,
+                        child: Row(
+                          mainAxisAlignment: isMe
+                              ? MainAxisAlignment.end
+                              : MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!isMe)
-                                  Text(
-                                    event.senderFromMemoryOrFallback
-                                        .calcDisplayname(),
-                                    style: Theme.of(context).textTheme.labelSmall,
-                                  ),
-                                if (!isMe) const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .secondaryContainer,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    label,
-                                    style: Theme.of(context).textTheme.labelSmall,
-                                  ),
+                            if (!isMe) ...[
+                              Tooltip(
+                                message: label,
+                                child: Icon(
+                                  iconForBridgeLabel(label),
+                                  size: 16,
+                                  color: colorForBridgeLabel(label),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
                               ),
-                              decoration: BoxDecoration(
-                                color: isMe
-                                    ? Theme.of(context).colorScheme.primaryContainer
-                                    : Theme.of(context).colorScheme.surfaceContainerHigh,
-                                borderRadius: BorderRadius.circular(12),
+                              const SizedBox(width: 6),
+                            ],
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isMe
+                                          ? Theme.of(context).colorScheme.primaryContainer
+                                          : Theme.of(context).colorScheme.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(event.body),
+                                  ),
+                                  Text(
+                                    DateFormat.Hm().format(event.originServerTs),
+                                    style: Theme.of(context).textTheme.labelSmall,
+                                  ),
+                                ],
                               ),
-                              child: Text(event.body),
                             ),
-                            Text(
-                              DateFormat.Hm().format(event.originServerTs),
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
+                            if (isMe) ...[
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: label,
+                                child: Icon(
+                                  iconForBridgeLabel(label),
+                                  size: 16,
+                                  color: colorForBridgeLabel(label),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       );
@@ -110,14 +114,19 @@ class UnifiedChatView extends StatelessWidget {
                       children: [
                         DropdownButton<String>(
                           value: controller.selectedRoomId,
-                          items: group.roomIds
-                              .map(
-                                (roomId) => DropdownMenuItem(
-                                  value: roomId,
-                                  child: Text(controller.labelForRoom(roomId)),
+                          items: group.roomIds.map((roomId) {
+                            final label = controller.labelForRoom(roomId);
+                            return DropdownMenuItem(
+                              value: roomId,
+                              child: Tooltip(
+                                message: label,
+                                child: Icon(
+                                  iconForBridgeLabel(label),
+                                  color: colorForBridgeLabel(label),
                                 ),
-                              )
-                              .toList(),
+                              ),
+                            );
+                          }).toList(),
                           onChanged: controller.selectRoom,
                         ),
                         const SizedBox(width: 8),

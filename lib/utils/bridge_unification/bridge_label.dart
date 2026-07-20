@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:matrix/matrix.dart';
 
 /// Derives a human-readable bridge label from a room's `m.bridge` state
@@ -23,3 +24,29 @@ String? bridgeLabelForRoom(Room room) {
 
   return null;
 }
+
+/// Bridged ghost/room display names are commonly suffixed by the bridge
+/// itself (e.g. "Martin Davidson via WhatsApp") - strips that for display
+/// contexts that already show the network separately (a badge/icon),
+/// where repeating it in the name is just clutter. No-op if there's no
+/// " via " suffix to strip.
+String stripViaSuffix(String name) =>
+    name.replaceFirst(RegExp(r' via .+$'), '');
+
+/// Icon (+ a brand-ish tint) for a bridge label, used wherever we'd
+/// otherwise show the network as text (the unified-conversation send
+/// dropdown, per-message badges). Generic Material icons rather than real
+/// brand marks - no new asset/font dependency for this.
+IconData iconForBridgeLabel(String label) => switch (label) {
+  'WhatsApp' => Icons.chat_outlined,
+  'Google Messages' => Icons.sms_outlined,
+  'Slack' => Icons.tag_outlined,
+  _ => Icons.forum_outlined,
+};
+
+Color colorForBridgeLabel(String label) => switch (label) {
+  'WhatsApp' => const Color(0xFF25D366),
+  'Google Messages' => const Color(0xFF1A73E8),
+  'Slack' => const Color(0xFF4A154B),
+  _ => Colors.grey,
+};
