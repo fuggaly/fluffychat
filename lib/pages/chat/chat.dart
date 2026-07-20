@@ -21,6 +21,9 @@ import 'package:fluffychat/pages/chat/trust_user_key_dialog.dart';
 import 'package:fluffychat/pages/chat/utils/web_file_to_x_file.dart';
 import 'package:fluffychat/pages/chat_details/chat_details.dart';
 import 'package:fluffychat/utils/adaptive_bottom_sheet.dart';
+import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
+import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
+import 'package:fluffychat/utils/delay_send/scheduler_config.dart';
 import 'package:fluffychat/utils/error_reporter.dart';
 import 'package:fluffychat/utils/file_selector.dart';
 import 'package:fluffychat/utils/matrix_sdk_extensions/event_extension.dart';
@@ -671,6 +674,87 @@ class ChatController extends State<ChatPageWithRoom>
       selection: const TextSelection.collapsed(offset: 0),
     );
 
+    setState(() {
+      sendController.text = pendingText;
+      _inputTextIsEmpty = pendingText.isEmpty;
+      replyEvent = null;
+      editEvent = null;
+      pendingText = '';
+    });
+  }
+
+  /// Delay Send: schedule the composed message for delivery at a future
+  /// time via matrix-send-scheduler, instead of sending immediately.
+  /// Carries the same reply/thread intent as send() so a scheduled
+  /// message is indistinguishable from a normal one once it posts.
+  Future<void> scheduleSend() async {
+    if (sendController.text.trim().isEmpty) return;
+
+    // v1 scope: matrix-send-scheduler only carries {roomId, body, sendAt},
+    // not reply/edit/thread context. Rather than silently dropping a
+    // reply or edit-in-progress, refuse and tell the user to clear it
+    // first (cancel the reply/edit, or send it immediately instead).
+    if (replyEvent != null || editEvent != null) {
+      if (!mounted) return;
+      await showOkCancelAlertDialog(
+        context: context,
+        title: 'Cannot schedule this message',
+        message:
+            'Delay Send does not support replies or edits yet. Cancel the reply/edit first, or send this message immediately instead.',
+        okLabel: 'OK',
+      );
+      return;
+    }
+
+    final configured = await SchedulerConfig.isConfigured();
+    if (!mounted) return;
+
+    if (!configured) {
+      await showOkCancelAlertDialog(
+        context: context,
+        title: 'Delay Send not set up',
+        message:
+            'Configure the scheduler URL and token in Chat settings before scheduling a message.',
+        okLabel: 'OK',
+      );
+      return;
+    }
+
+    final proceed = await showTrustUserInRoomDialog(context, room);
+    if (!mounted || !proceed) return;
+
+    final sendAt = await showScheduleSendDialog(context);
+    if (sendAt == null || !mounted) return;
+
+    final body = sendController.text;
+    _storeInputTimeoutTimer?.cancel();
+    final prefs = Matrix.of(context).store;
+    prefs.remove('draft_$roomId');
+
+    try {
+      await SchedulerApiClient().create(
+        roomId: room.id,
+        body: body,
+        sendAt: sendAt,
+      );
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not schedule message: ${e.message}')),
+      );
+      // Keep the composed text intact so nothing is silently lost.
+      return;
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Message scheduled for $sendAt')),
+    );
+
+    sendController.value = TextEditingValue(
+      text: pendingText,
+      selection: const TextSelection.collapsed(offset: 0),
+    );
     setState(() {
       sendController.text = pendingText;
       _inputTextIsEmpty = pendingText.isEmpty;

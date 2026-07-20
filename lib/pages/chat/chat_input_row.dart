@@ -375,8 +375,10 @@ class ChatInputRow extends StatelessWidget {
                           )
                         : IconButton(
                             key: Key('send_button'),
-                            tooltip: L10n.of(context).send,
+                            tooltip:
+                                '${L10n.of(context).send} (long-press to schedule)',
                             onPressed: controller.send,
+                            onLongPress: controller.scheduleSend,
                             style: IconButton.styleFrom(
                               backgroundColor: theme.bubbleColor,
                               foregroundColor: theme.onBubbleColor,

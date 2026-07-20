@@ -91,6 +91,27 @@ class SettingsChatView extends StatelessWidget {
               Divider(color: theme.dividerColor),
               ListTile(
                 title: Text(
+                  'Delay Send',
+                  style: TextStyle(
+                    color: theme.colorScheme.secondary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ListTile(
+                title: const Text('Delay Send settings'),
+                subtitle: const Text(
+                  'Configure the scheduler and view/cancel pending scheduled messages',
+                ),
+                onTap: () => context.go('/rooms/settings/chat/delay_send'),
+                trailing: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Icon(Icons.chevron_right_outlined),
+                ),
+              ),
+              Divider(color: theme.dividerColor),
+              ListTile(
+                title: Text(
                   L10n.of(context).calls,
                   style: TextStyle(
                     color: theme.colorScheme.secondary,

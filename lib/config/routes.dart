@@ -25,6 +25,7 @@ import 'package:fluffychat/pages/new_private_chat/new_private_chat.dart';
 import 'package:fluffychat/pages/settings/settings.dart';
 import 'package:fluffychat/pages/settings_3pid/settings_3pid.dart';
 import 'package:fluffychat/pages/settings_chat/settings_chat.dart';
+import 'package:fluffychat/pages/settings_delay_send/settings_delay_send.dart';
 import 'package:fluffychat/pages/settings_emotes/settings_emotes.dart';
 import 'package:fluffychat/pages/settings_homeserver/settings_homeserver.dart';
 import 'package:fluffychat/pages/settings_ignore_list/settings_ignore_list.dart';
@@ -270,6 +271,14 @@ abstract class AppRoutes {
                             EmotesSettings(
                               roomId: state.pathParameters['roomid'],
                             ),
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'delay_send',
+                          pageBuilder: (context, state) => defaultPageBuilder(
+                            context,
+                            state,
+                            const SettingsDelaySend(),
                           ),
                         ),
                       ],
