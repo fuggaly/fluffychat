@@ -54,8 +54,16 @@ class BridgeSearchController extends State<BridgeSearch> {
 
   /// Digits only, so "+61 422 574 711", "tel:+61422574711", and
   /// "61422574711" (a WhatsApp ghost mxid's embedded number) all compare
-  /// equal regardless of formatting.
+  /// equal regardless of formatting. Used only for dedup comparisons -
+  /// the properly formatted phone (see _phoneFromIdentifier) is what
+  /// actually gets sent to resolve_identifier/create_dm.
   String _normalizePhone(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
+  /// Strips a "tel:" prefix if present, leaving a usable "+614..."
+  /// identifier. Address-book phones already come in this form with no
+  /// prefix to strip.
+  String _phoneFromIdentifier(String identifier) =>
+      identifier.replaceFirst('tel:', '');
 
   Future<void> _search(String query) async {
     if (query.trim().isEmpty) {
@@ -68,10 +76,18 @@ class BridgeSearchController extends State<BridgeSearch> {
 
     final newResults = <BridgeSearchResult>[];
     final newErrors = <String, String>{};
-    // Tracks which (bridgeId, phone) pairs the per-bridge searches below
-    // already surfaced, so the address-book merge afterward doesn't show
-    // the same person twice for the same network.
+    // Tracks which (bridgeId, normalizedPhone) pairs are already shown,
+    // so the cross-offer pass below doesn't duplicate a result some
+    // bridge's own native search already surfaced.
     final coveredPhonesByBridge = <String, Set<String>>{};
+    // Every (name, phone) pair found by ANY source (a bridge's own native
+    // search, or the address book) - cross-offered across every
+    // phone-identifier-capable bridge afterward, regardless of which
+    // source actually found it. Without this, someone found only via
+    // WhatsApp's own contact sync (never in the address book, e.g. a
+    // contact synced independently on that phone) would never get
+    // offered on Google Messages, and vice versa.
+    final knownPhones = <(String name, String phone)>[];
 
     for (final bridge in bridges) {
       final covered = coveredPhonesByBridge[bridge.id] = {};
@@ -97,6 +113,7 @@ class BridgeSearchController extends State<BridgeSearch> {
         for (final c in matches) {
           for (final identifier in c.identifiers) {
             covered.add(_normalizePhone(identifier));
+            knownPhones.add((c.name, _phoneFromIdentifier(identifier)));
           }
         }
       } on BridgeProvisioningException catch (e) {
@@ -110,33 +127,32 @@ class BridgeSearchController extends State<BridgeSearch> {
     // neither bridge's own contact listing is a reliable substitute for
     // it (WhatsApp only knows phone-synced WhatsApp users, Google
     // Messages' own contact API returns a limited Google-curated list).
-    // For each phone number, offer every bridge that accepts a raw phone
-    // identifier (WhatsApp, Google Messages) - unless that bridge already
-    // surfaced this exact number itself above.
     try {
       final addressBookMatches = await _relayClient.searchAddressBook(query);
       for (final person in addressBookMatches) {
         for (final phone in person.phones) {
-          final normalized = _normalizePhone(phone);
-          for (final bridge in bridges) {
-            if (!bridge.kind.usesPhoneIdentifiers) continue;
-            if (coveredPhonesByBridge[bridge.id]?.contains(normalized) ?? false) {
-              continue;
-            }
-            newResults.add(
-              BridgeSearchResult(
-                bridge,
-                BridgeContact(id: phone, name: person.name),
-              ),
-            );
-            coveredPhonesByBridge[bridge.id]?.add(normalized);
-          }
+          knownPhones.add((person.name, phone));
         }
       }
     } on BridgeProvisioningException catch (e) {
       newErrors['address book'] = e.message;
     } catch (e) {
       newErrors['address book'] = e.toString();
+    }
+
+    // Cross-offer: for every phone number found by ANY source above,
+    // offer every phone-identifier-capable bridge that hasn't already
+    // surfaced that exact number natively.
+    for (final (name, phone) in knownPhones) {
+      final normalized = _normalizePhone(phone);
+      if (normalized.isEmpty) continue;
+      for (final bridge in bridges) {
+        if (!bridge.kind.usesPhoneIdentifiers) continue;
+        final covered = coveredPhonesByBridge[bridge.id] ??= {};
+        if (covered.contains(normalized)) continue;
+        newResults.add(BridgeSearchResult(bridge, BridgeContact(id: phone, name: name)));
+        covered.add(normalized);
+      }
     }
 
     if (!mounted) return;
