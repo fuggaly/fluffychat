@@ -188,6 +188,89 @@ class ChatController extends State<ChatPageWithRoom>
 
   bool showEmojiPicker = false;
 
+  List<ScheduledMessage> pendingScheduledMessages = [];
+
+  /// Refreshes this room's Delay Send queue for the ghost-message list
+  /// shown above the composer. Silent on failure/not-configured - this is
+  /// a nice-to-have overlay on top of the real conversation, not core
+  /// chat functionality, and Delay Send settings is the place errors
+  /// about the scheduler itself should surface.
+  Future<void> _loadPendingScheduledMessages() async {
+    if (!await SchedulerConfig.isConfigured()) return;
+    try {
+      final all = await SchedulerApiClient().listPending();
+      if (!mounted) return;
+      setState(() {
+        pendingScheduledMessages = all.where((m) => m.roomId == room.id).toList()
+          ..sort((a, b) => a.sendAt.compareTo(b.sendAt));
+      });
+    } on SchedulerApiException {
+      // Ignored - see above.
+    }
+  }
+
+  Future<void> sendScheduledMessageNow(ScheduledMessage msg) async {
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send now: ${e.message}')),
+      );
+      return;
+    }
+    // ignore: unawaited_futures
+    room.sendTextEvent(msg.body);
+    await _loadPendingScheduledMessages();
+  }
+
+  Future<void> editAndSendScheduledMessageNow(ScheduledMessage msg) async {
+    final newBody = await showTextInputDialog(
+      context: context,
+      title: 'Edit message',
+      initialText: msg.body,
+      minLines: 1,
+      maxLines: 8,
+      okLabel: L10n.of(context).send,
+      cancelLabel: L10n.of(context).cancel,
+    );
+    if (newBody == null || newBody.trim().isEmpty || !mounted) return;
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send now: ${e.message}')),
+      );
+      return;
+    }
+    // ignore: unawaited_futures
+    room.sendTextEvent(newBody);
+    await _loadPendingScheduledMessages();
+  }
+
+  Future<void> cancelScheduledMessage(ScheduledMessage msg) async {
+    final confirmed = await showOkCancelAlertDialog(
+      context: context,
+      title: 'Cancel scheduled message?',
+      message: msg.body,
+      okLabel: 'Cancel it',
+      cancelLabel: 'Keep it',
+      isDestructive: true,
+    );
+    if (confirmed != OkCancelResult.ok) return;
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not cancel: ${e.message}')),
+      );
+      return;
+    }
+    await _loadPendingScheduledMessages();
+  }
+
   String? get threadLastEventId {
     final threadId = activeThreadId;
     if (threadId == null) return null;
@@ -416,6 +499,7 @@ class ChatController extends State<ChatPageWithRoom>
         : '';
     WidgetsBinding.instance.addObserver(this);
     _tryLoadTimeline();
+    _loadPendingScheduledMessages();
   }
 
   final Set<String> expandedEventIds = {};
@@ -762,6 +846,7 @@ class ChatController extends State<ChatPageWithRoom>
       editEvent = null;
       pendingText = '';
     });
+    await _loadPendingScheduledMessages();
   }
 
   Future<void> sendFileAction({FileType type = FileType.any}) async {

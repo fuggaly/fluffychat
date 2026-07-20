@@ -10,6 +10,7 @@ import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/chat.dart';
 import 'package:fluffychat/pages/chat/encrpytion_info.dart';
 import 'package:fluffychat/pages/chat/events/message.dart';
+import 'package:fluffychat/pages/chat/pending_scheduled_messages.dart';
 import 'package:fluffychat/pages/chat/seen_by_row.dart';
 import 'package:fluffychat/pages/chat/typing_indicators.dart';
 import 'package:fluffychat/utils/account_config.dart';
@@ -96,6 +97,8 @@ class ChatEventList extends StatelessWidget {
                   mainAxisSize: .min,
                   children: [
                     if (events.isNotEmpty) SeenByRow(event: events.first),
+                    if (controller.pendingScheduledMessages.isNotEmpty)
+                      PendingScheduledMessages(controller),
                     TypingIndicators(controller),
                     EncryptionInfo(room: controller.room),
                   ],
