@@ -1,4 +1,5 @@
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -26,7 +27,20 @@ class UnifiedChatView extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: context.pop),
-        title: Text(group.label),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            UnifiedGroupAvatar(
+              client: controller.client,
+              group: group,
+              size: 32,
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(group.label, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator.adaptive())

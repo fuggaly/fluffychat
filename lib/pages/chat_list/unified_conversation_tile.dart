@@ -1,6 +1,6 @@
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
-import 'package:fluffychat/widgets/avatar.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:matrix/matrix.dart';
@@ -44,57 +44,46 @@ class UnifiedConversationTile extends StatelessWidget {
               : latest,
         );
 
-    final avatarRoom = rooms.firstOrNull;
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Material(
         borderRadius: BorderRadius.circular(AppConfig.borderRadius),
         clipBehavior: Clip.hardEdge,
-        // A DM room with no explicit m.room.avatar falls back to the
-        // other member's own profile picture (Room.avatar), which needs
-        // lazy-loaded member state fetched into memory first - same
-        // reason ChatListItem does this for normal rooms.
-        child: FutureBuilder(
-          future: avatarRoom?.avatar == null
-              ? avatarRoom?.loadHeroUsers()
-              : null,
-          builder: (context, _) => ListTile(
-            minVerticalPadding: 16,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: Avatar(mxContent: avatarRoom?.avatar, name: group.label),
-            title: Text(
-              group.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: lastEvent == null
-                ? null
-                : Text(
-                    lastEvent.body,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-            trailing: unreadCount == 0
-                ? null
-                : Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text(
-                      unreadCount.toString(),
-                      style: TextStyle(
-                        color: theme.colorScheme.onPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-            onTap: () => context.go('/rooms/unified/${group.id}'),
+        child: ListTile(
+          minVerticalPadding: 16,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          leading: UnifiedGroupAvatar(client: client, group: group),
+          title: Text(
+            group.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
+          subtitle: lastEvent == null
+              ? null
+              : Text(
+                  lastEvent.body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          trailing: unreadCount == 0
+              ? null
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                  child: Text(
+                    unreadCount.toString(),
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+          onTap: () => context.go('/rooms/unified/${group.id}'),
         ),
       ),
     );
