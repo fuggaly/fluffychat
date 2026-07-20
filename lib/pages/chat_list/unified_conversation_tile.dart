@@ -1,6 +1,7 @@
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
+import 'package:fluffychat/utils/date_time_extension.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:matrix/matrix.dart';
@@ -44,6 +45,17 @@ class UnifiedConversationTile extends StatelessWidget {
               : latest,
         );
 
+    // Same "most recent activity" concept ChatListItem shows next to a
+    // normal room's name (room.latestEventReceivedTime) - taken across all
+    // of this group's member rooms since it isn't backed by one Room.
+    final latestReceivedTime = rooms
+        .map((r) => r.latestEventReceivedTime)
+        .fold<DateTime?>(
+          null,
+          (latest, time) =>
+              latest == null || time.isAfter(latest) ? time : latest,
+        );
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Material(
@@ -53,11 +65,32 @@ class UnifiedConversationTile extends StatelessWidget {
           minVerticalPadding: 16,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8),
           leading: UnifiedGroupAvatar(client: client, group: group),
-          title: Text(
-            group.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  group.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (latestReceivedTime != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4.0),
+                  child: Text(
+                    latestReceivedTime.localizedTimeShort(context),
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: unreadCount > 0 ? FontWeight.bold : null,
+                      color: unreadCount > 0
+                          ? theme.colorScheme.primary
+                          : null,
+                    ),
+                  ),
+                ),
+            ],
           ),
           subtitle: lastEvent == null
               ? null
