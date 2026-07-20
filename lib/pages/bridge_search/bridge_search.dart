@@ -6,6 +6,7 @@ import 'package:fluffychat/utils/bridge_search/bridge_relay_config.dart';
 import 'package:fluffychat/utils/bridge_search/bridge_search_config.dart';
 import 'package:fluffychat/utils/bridge_search/configured_bridge.dart';
 import 'package:fluffychat/widgets/future_loading_dialog.dart';
+import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -115,22 +116,37 @@ class BridgeSearchController extends State<BridgeSearch> {
   }
 
   Future<void> startChat(BridgeSearchResult result) async {
+    final client = Matrix.of(context).client;
+    final myUserId = client.userID!;
+
     final roomId = await showFutureLoadingDialog(
       context: context,
       future: () async {
         final bridge = result.bridge;
-        return bridge.kind.supportsContactsList && !bridge.kind.supportsSearchUsers
-            ? _relayClient.resolveIdentifier(
+        // Bridge-created DM rooms only have @bridgehub as a member (it's
+        // whose token actually authenticated the request) - invite this
+        // app's own user, then join immediately so there's no dangling
+        // invite waiting to be accepted separately.
+        final newRoomId =
+            bridge.kind.supportsContactsList && !bridge.kind.supportsSearchUsers
+            ? await _relayClient.resolveIdentifier(
                 bridge.id,
                 bridge.label,
                 result.contact.actionIdentifier,
                 createChat: true,
+                inviteUserId: myUserId,
               )
-            : _relayClient.createDm(
+            : await _relayClient.createDm(
                 bridge.id,
                 bridge.label,
                 result.contact.actionIdentifier,
+                inviteUserId: myUserId,
               );
+
+        final waitForRoom = client.waitForRoomInSync(newRoomId, join: true);
+        await client.joinRoom(newRoomId);
+        await waitForRoom;
+        return newRoomId;
       },
     );
     if (roomId.error != null || !mounted) return;

@@ -113,19 +113,28 @@ class BridgeProvisioningClient {
         .toList();
   }
 
+  /// [inviteUserId] (the app's own logged-in user) gets invited into the
+  /// resulting room after creation - bridge-created DM rooms otherwise
+  /// only have @bridgehub as a member, since that's whose token actually
+  /// authenticated the request. Caller is expected to join the room
+  /// afterward (see BridgeSearchController.startChat).
   Future<String> resolveIdentifier(
     String bridgeId,
     String bridgeLabel,
     String id, {
     bool createChat = false,
+    String? inviteUserId,
   }) async {
     // Encoded exactly once here - id may now be a full mxid (@user:server),
     // which needs escaping to survive as a single path segment. The relay
     // decodes this once and re-encodes once more on its own outbound hop -
     // never double-encode along the way.
+    final inviteParam = inviteUserId != null
+        ? '&invite=${Uri.encodeComponent(inviteUserId)}'
+        : '';
     final res = await http.get(
       await _uri(
-        '/bridges/$bridgeId/resolve_identifier/${Uri.encodeComponent(id)}?create_chat=$createChat',
+        '/bridges/$bridgeId/resolve_identifier/${Uri.encodeComponent(id)}?create_chat=$createChat$inviteParam',
       ),
       headers: await _authHeaders(),
     );
@@ -136,9 +145,17 @@ class BridgeProvisioningClient {
     return json['dm_room_mxid'] as String;
   }
 
-  Future<String> createDm(String bridgeId, String bridgeLabel, String id) async {
+  Future<String> createDm(
+    String bridgeId,
+    String bridgeLabel,
+    String id, {
+    String? inviteUserId,
+  }) async {
+    final inviteParam = inviteUserId != null
+        ? '?invite=${Uri.encodeComponent(inviteUserId)}'
+        : '';
     final res = await http.post(
-      await _uri('/bridges/$bridgeId/create_dm/${Uri.encodeComponent(id)}'),
+      await _uri('/bridges/$bridgeId/create_dm/${Uri.encodeComponent(id)}$inviteParam'),
       headers: await _authHeaders(),
     );
     if (res.statusCode != 200) {
