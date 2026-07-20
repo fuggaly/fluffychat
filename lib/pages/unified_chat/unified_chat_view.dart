@@ -124,67 +124,94 @@ class UnifiedChatView extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  if (!isMe) ...[
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 12,
-                                        bottom: 8,
-                                      ),
-                                      child: Tooltip(
-                                        message: label,
-                                        child: FaIcon(
-                                          iconForBridgeLabel(label),
-                                          size: 16,
-                                          color: colorForBridgeLabel(label),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  Expanded(
-                                    child: Message(
-                                      event,
-                                      timeline: timeline,
-                                      nextEvent: nextEvent,
-                                      previousEvent: previousEvent,
-                                      bigEmojis: controller.bigEmojis,
-                                      colors: colors,
-                                      scrollController:
-                                          controller.scrollController,
-                                      // Interactive features (reactions,
-                                      // editing, threads, swipe-to-reply,
-                                      // selection, mentions) aren't wired
-                                      // up in the merged view - only
-                                      // rendering parity was asked for.
-                                      onSelect: (_) {},
-                                      onInfoTab: (_) {},
-                                      scrollToEventId: (_) {},
-                                      onSwipe: () {},
-                                      onMention: () {},
-                                      onEdit: () {},
-                                      enterThread: null,
-                                      singleSelected: false,
-                                    ),
+                              Center(
+                                child: ConstrainedBox(
+                                  // Message internally caps its own bubble
+                                  // at FluffyThemes.maxTimelineWidth and
+                                  // centers itself within whatever width
+                                  // it's given - on windows wider than that
+                                  // cap, that left the network icon (a
+                                  // sibling placed at the true row edge)
+                                  // stranded far from the visually-centered
+                                  // bubble. Capping and centering this
+                                  // icon+bubble pair as one unit keeps them
+                                  // adjacent while still matching a normal
+                                  // room's centered-column look on wide
+                                  // windows.
+                                  constraints: const BoxConstraints(
+                                    maxWidth:
+                                        FluffyThemes.maxTimelineWidth + 40,
                                   ),
-                                  if (isMe) ...[
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        right: 12,
-                                        bottom: 8,
-                                      ),
-                                      child: Tooltip(
-                                        message: label,
-                                        child: FaIcon(
-                                          iconForBridgeLabel(label),
-                                          size: 16,
-                                          color: colorForBridgeLabel(label),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisAlignment: isMe
+                                        ? MainAxisAlignment.end
+                                        : MainAxisAlignment.start,
+                                    children: [
+                                      if (!isMe) ...[
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 12,
+                                            bottom: 8,
+                                          ),
+                                          child: Tooltip(
+                                            message: label,
+                                            child: FaIcon(
+                                              iconForBridgeLabel(label),
+                                              size: 16,
+                                              color: colorForBridgeLabel(
+                                                label,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      Expanded(
+                                        child: Message(
+                                          event,
+                                          timeline: timeline,
+                                          nextEvent: nextEvent,
+                                          previousEvent: previousEvent,
+                                          bigEmojis: controller.bigEmojis,
+                                          colors: colors,
+                                          scrollController:
+                                              controller.scrollController,
+                                          // Interactive features (reactions,
+                                          // editing, threads, swipe-to-reply,
+                                          // selection, mentions) aren't wired
+                                          // up in the merged view - only
+                                          // rendering parity was asked for.
+                                          onSelect: (_) {},
+                                          onInfoTab: (_) {},
+                                          scrollToEventId: (_) {},
+                                          onSwipe: () {},
+                                          onMention: () {},
+                                          onEdit: () {},
+                                          enterThread: null,
+                                          singleSelected: false,
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ],
+                                      if (isMe) ...[
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            right: 12,
+                                            bottom: 8,
+                                          ),
+                                          child: Tooltip(
+                                            message: label,
+                                            child: FaIcon(
+                                              iconForBridgeLabel(label),
+                                              size: 16,
+                                              color: colorForBridgeLabel(
+                                                label,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ),
                             ],
                           );

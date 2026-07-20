@@ -76,10 +76,33 @@ class UnifiedChatController extends State<UnifiedChat> {
           if (mounted) setState(() {});
         },
       );
+      await _ensureMarkedAsDirectChat(room);
     }
 
     if (!mounted) return;
     setState(() => loading = false);
+  }
+
+  /// Bridge portal rooms aren't necessarily flagged in the user's own
+  /// `m.direct` account data (unlike each bridge's bot management room,
+  /// which is) even though they're genuinely 1:1 conversations. Message
+  /// only suppresses the "via WhatsApp"/"via SMS" sender-name text for
+  /// rooms where `room.isDirectChat` is true, so mark these explicitly -
+  /// this is the same mechanism a normal accepted DM invite uses, not a
+  /// workaround specific to the merged view.
+  Future<void> _ensureMarkedAsDirectChat(Room room) async {
+    if (room.isDirectChat) return;
+    final userId = client.userID;
+    if (userId == null) return;
+    User? other;
+    for (final participant in room.getParticipants()) {
+      if (participant.id != userId) {
+        other = participant;
+        break;
+      }
+    }
+    if (other == null) return;
+    await room.addToDirectChat(other.id);
   }
 
   /// All message events from every member room's timeline, newest first.
