@@ -9,13 +9,24 @@ class BridgeContact {
   final String name;
   final String? avatarUrl;
   final List<String> identifiers;
+  final String? mxid;
 
   BridgeContact({
     required this.id,
     required this.name,
     this.avatarUrl,
     this.identifiers = const [],
+    this.mxid,
   });
+
+  /// The identifier to pass back to resolve_identifier/create_dm to act on
+  /// this specific contact. Prefer [mxid] when present - the bridgev2
+  /// provisioning API tries to parse the identifier as a ghost mxid first,
+  /// which is the robust path (bypasses each network connector's own,
+  /// less-reliable string-based identifier resolution entirely). Falls
+  /// back to [id] only when no mxid was returned (e.g. a fresh
+  /// search_users hit with no existing ghost yet).
+  String get actionIdentifier => (mxid != null && mxid!.isNotEmpty) ? mxid! : id;
 
   factory BridgeContact.fromJson(Map<String, Object?> json) => BridgeContact(
     id: json['id'] as String,
@@ -23,6 +34,7 @@ class BridgeContact {
     avatarUrl: json['avatar_url'] as String?,
     identifiers:
         (json['identifiers'] as List?)?.cast<String>() ?? const [],
+    mxid: json['mxid'] as String?,
   );
 }
 
@@ -76,7 +88,7 @@ class BridgeProvisioningClient {
     if (res.statusCode != 200) {
       throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
-    final list = jsonDecode(res.body) as List;
+    final list = (jsonDecode(res.body) as Map)['contacts'] as List;
     return list
         .map((c) => BridgeContact.fromJson((c as Map).cast()))
         .toList();
@@ -95,7 +107,7 @@ class BridgeProvisioningClient {
     if (res.statusCode != 200) {
       throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
-    final list = jsonDecode(res.body) as List;
+    final list = (jsonDecode(res.body) as Map)['results'] as List;
     return list
         .map((c) => BridgeContact.fromJson((c as Map).cast()))
         .toList();
@@ -107,9 +119,13 @@ class BridgeProvisioningClient {
     String id, {
     bool createChat = false,
   }) async {
+    // Encoded exactly once here - id may now be a full mxid (@user:server),
+    // which needs escaping to survive as a single path segment. The relay
+    // decodes this once and re-encodes once more on its own outbound hop -
+    // never double-encode along the way.
     final res = await http.get(
       await _uri(
-        '/bridges/$bridgeId/resolve_identifier/$id?create_chat=$createChat',
+        '/bridges/$bridgeId/resolve_identifier/${Uri.encodeComponent(id)}?create_chat=$createChat',
       ),
       headers: await _authHeaders(),
     );
@@ -122,7 +138,7 @@ class BridgeProvisioningClient {
 
   Future<String> createDm(String bridgeId, String bridgeLabel, String id) async {
     final res = await http.post(
-      await _uri('/bridges/$bridgeId/create_dm/$id'),
+      await _uri('/bridges/$bridgeId/create_dm/${Uri.encodeComponent(id)}'),
       headers: await _authHeaders(),
     );
     if (res.statusCode != 200) {

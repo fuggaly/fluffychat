@@ -108,10 +108,14 @@ class BridgeSearchController extends State<BridgeSearch> {
             ? _relayClient.resolveIdentifier(
                 bridge.id,
                 bridge.label,
-                result.contact.id,
+                result.contact.actionIdentifier,
                 createChat: true,
               )
-            : _relayClient.createDm(bridge.id, bridge.label, result.contact.id);
+            : _relayClient.createDm(
+                bridge.id,
+                bridge.label,
+                result.contact.actionIdentifier,
+              );
       },
     );
     if (roomId.error != null || !mounted) return;
