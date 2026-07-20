@@ -52,6 +52,11 @@ class BridgeSearchController extends State<BridgeSearch> {
     _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
   }
 
+  /// Digits only, so "+61 422 574 711", "tel:+61422574711", and
+  /// "61422574711" (a WhatsApp ghost mxid's embedded number) all compare
+  /// equal regardless of formatting.
+  String _normalizePhone(String raw) => raw.replaceAll(RegExp(r'[^0-9]'), '');
+
   Future<void> _search(String query) async {
     if (query.trim().isEmpty) {
       setState(() {
@@ -63,8 +68,13 @@ class BridgeSearchController extends State<BridgeSearch> {
 
     final newResults = <BridgeSearchResult>[];
     final newErrors = <String, String>{};
+    // Tracks which (bridgeId, phone) pairs the per-bridge searches below
+    // already surfaced, so the address-book merge afterward doesn't show
+    // the same person twice for the same network.
+    final coveredPhonesByBridge = <String, Set<String>>{};
 
     for (final bridge in bridges) {
+      final covered = coveredPhonesByBridge[bridge.id] = {};
       try {
         List<BridgeContact> matches;
         if (bridge.kind.supportsSearchUsers) {
@@ -84,11 +94,49 @@ class BridgeSearchController extends State<BridgeSearch> {
           continue;
         }
         newResults.addAll(matches.map((c) => BridgeSearchResult(bridge, c)));
+        for (final c in matches) {
+          for (final identifier in c.identifiers) {
+            covered.add(_normalizePhone(identifier));
+          }
+        }
       } on BridgeProvisioningException catch (e) {
         newErrors[bridge.id] = e.message;
       } catch (e) {
         newErrors[bridge.id] = e.toString();
       }
+    }
+
+    // Merge in the real address book (contacts-sync's compiled data) -
+    // neither bridge's own contact listing is a reliable substitute for
+    // it (WhatsApp only knows phone-synced WhatsApp users, Google
+    // Messages' own contact API returns a limited Google-curated list).
+    // For each phone number, offer every bridge that accepts a raw phone
+    // identifier (WhatsApp, Google Messages) - unless that bridge already
+    // surfaced this exact number itself above.
+    try {
+      final addressBookMatches = await _relayClient.searchAddressBook(query);
+      for (final person in addressBookMatches) {
+        for (final phone in person.phones) {
+          final normalized = _normalizePhone(phone);
+          for (final bridge in bridges) {
+            if (!bridge.kind.usesPhoneIdentifiers) continue;
+            if (coveredPhonesByBridge[bridge.id]?.contains(normalized) ?? false) {
+              continue;
+            }
+            newResults.add(
+              BridgeSearchResult(
+                bridge,
+                BridgeContact(id: phone, name: person.name),
+              ),
+            );
+            coveredPhonesByBridge[bridge.id]?.add(normalized);
+          }
+        }
+      }
+    } on BridgeProvisioningException catch (e) {
+      newErrors['address book'] = e.message;
+    } catch (e) {
+      newErrors['address book'] = e.toString();
     }
 
     if (!mounted) return;

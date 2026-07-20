@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'address_book_contact.dart';
 import 'bridge_relay_config.dart';
 
 class BridgeContact {
@@ -78,6 +79,25 @@ class BridgeProvisioningClient {
       );
     }
     return Uri.parse('$baseUrl$path');
+  }
+
+  /// Searches the real address book (contacts-sync's compiled data),
+  /// independent of any single bridge's own contact cache - see
+  /// matrix-bridge-relay's contactsSearch.mjs for why this exists (both
+  /// bridges' own contact listings turned out to be incomplete substitutes
+  /// for the actual address book).
+  Future<List<AddressBookContact>> searchAddressBook(String query) async {
+    final res = await http.get(
+      await _uri('/contacts/search?query=${Uri.encodeComponent(query)}'),
+      headers: await _authHeaders(),
+    );
+    if (res.statusCode != 200) {
+      throw BridgeProvisioningException('address book', _errorMessage(res));
+    }
+    final list = (jsonDecode(res.body) as Map)['contacts'] as List;
+    return list
+        .map((c) => AddressBookContact.fromJson((c as Map).cast()))
+        .toList();
   }
 
   Future<List<BridgeContact>> contacts(String bridgeId, String bridgeLabel) async {

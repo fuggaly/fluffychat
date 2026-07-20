@@ -19,6 +19,18 @@ extension BridgeKindCapabilities on BridgeKind {
     BridgeKind.generic => false,
   };
 
+  /// Whether resolve_identifier/create_dm accepts a raw phone number as
+  /// the identifier for this bridge (confirmed via each connector's own
+  /// source - both parse a bare phone number directly when there's no
+  /// existing ghost). Slack identifiers are workspace-specific user IDs,
+  /// not phone numbers, so address-book phone matches don't apply there.
+  bool get usesPhoneIdentifiers => switch (this) {
+    BridgeKind.whatsapp => true,
+    BridgeKind.googleMessages => true,
+    BridgeKind.slack => false,
+    BridgeKind.generic => false,
+  };
+
   String get displayName => switch (this) {
     BridgeKind.whatsapp => 'WhatsApp',
     BridgeKind.googleMessages => 'Google Messages',
