@@ -1,7 +1,7 @@
 /// Which bridgev2 provisioning capabilities a bridge type actually
 /// implements - confirmed via research against the mautrix-go bridgev2
 /// source (whatsapp/gmessages/slack connectors). These are inherent to the
-/// bridge software, not user-configurable, unlike the label/base URL.
+/// bridge software, not user-configurable, unlike the label.
 enum BridgeKind { whatsapp, googleMessages, slack, generic }
 
 extension BridgeKindCapabilities on BridgeKind {
@@ -27,17 +27,18 @@ extension BridgeKindCapabilities on BridgeKind {
   };
 }
 
+/// [id] must match a key in matrix-bridge-relay's own `bridges.json` on
+/// the server - the app talks only to the relay, which knows each
+/// bridge's actual base URL and handles auth as @bridgehub itself.
 class ConfiguredBridge {
   final String id;
   final BridgeKind kind;
   final String label;
-  final String baseUrl;
 
   const ConfiguredBridge({
     required this.id,
     required this.kind,
     required this.label,
-    required this.baseUrl,
   });
 
   factory ConfiguredBridge.fromJson(Map<String, Object?> json) =>
@@ -45,13 +46,11 @@ class ConfiguredBridge {
         id: json['id'] as String,
         kind: BridgeKind.values.byName(json['kind'] as String),
         label: json['label'] as String,
-        baseUrl: json['baseUrl'] as String,
       );
 
   Map<String, Object?> toJson() => {
     'id': id,
     'kind': kind.name,
     'label': label,
-    'baseUrl': baseUrl,
   };
 }

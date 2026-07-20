@@ -131,6 +131,17 @@ class SettingsChatView extends StatelessWidget {
                   child: Icon(Icons.chevron_right_outlined),
                 ),
               ),
+              ListTile(
+                title: const Text('Bridge Search settings'),
+                subtitle: const Text(
+                  'Configure the matrix-bridge-relay connection used for bridge contact search',
+                ),
+                onTap: () => context.go('/rooms/settings/chat/bridge_relay'),
+                trailing: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Icon(Icons.chevron_right_outlined),
+                ),
+              ),
               Divider(color: theme.dividerColor),
               ListTile(
                 title: Text(

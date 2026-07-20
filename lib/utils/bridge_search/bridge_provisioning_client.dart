@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import 'configured_bridge.dart';
+import 'bridge_relay_config.dart';
 
 class BridgeContact {
   final String id;
@@ -36,39 +36,45 @@ class BridgeProvisioningException implements Exception {
   String toString() => '$bridgeLabel: $message';
 }
 
-/// Thin client for one bridge's bridgev2 provisioning API
-/// (`/_matrix/provision/v3/...`), authenticated with the user's own
-/// logged-in Matrix access token (works when the bridge has
-/// `allow_matrix_auth: true`, which whatsapp/gmessages already do here -
-/// no separate bridge secret needed client-side).
+/// Client for matrix-bridge-relay's HTTP API. Bridge sessions on this
+/// homeserver are established under @bridgehub, not the app user's own
+/// account, so provisioning requests can't be made with the user's own
+/// Matrix access token (the bridge would correctly say "not logged in") -
+/// the relay holds @bridgehub's token server-side and this client never
+/// sees it, authenticating only with its own relay bearer token.
 class BridgeProvisioningClient {
-  final ConfiguredBridge bridge;
-  final String matrixAccessToken;
-  final String matrixUserId;
-
-  BridgeProvisioningClient({
-    required this.bridge,
-    required this.matrixAccessToken,
-    required this.matrixUserId,
-  });
-
-  Map<String, String> get _headers => {
-    'Authorization': 'Bearer $matrixAccessToken',
-  };
-
-  Uri _uri(String path, [Map<String, String>? query]) => Uri.parse(
-    '${bridge.baseUrl}/_matrix/provision/v3$path',
-  ).replace(queryParameters: {'user_id': matrixUserId, ...?query});
-
-  Future<bool> whoami() async {
-    final res = await http.get(_uri('/whoami'), headers: _headers);
-    return res.statusCode == 200;
+  Future<Map<String, String>> _authHeaders() async {
+    final token = await BridgeRelayConfig.getBearerToken();
+    if (token == null || token.isEmpty) {
+      throw BridgeProvisioningException(
+        'relay',
+        'Bridge search is not configured yet (missing relay token).',
+      );
+    }
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
   }
 
-  Future<List<BridgeContact>> contacts() async {
-    final res = await http.get(_uri('/contacts'), headers: _headers);
+  Future<Uri> _uri(String path) async {
+    final baseUrl = await BridgeRelayConfig.getBaseUrl();
+    if (baseUrl == null || baseUrl.isEmpty) {
+      throw BridgeProvisioningException(
+        'relay',
+        'Bridge search is not configured yet (missing relay URL).',
+      );
+    }
+    return Uri.parse('$baseUrl$path');
+  }
+
+  Future<List<BridgeContact>> contacts(String bridgeId, String bridgeLabel) async {
+    final res = await http.get(
+      await _uri('/bridges/$bridgeId/contacts'),
+      headers: await _authHeaders(),
+    );
     if (res.statusCode != 200) {
-      throw BridgeProvisioningException(bridge.label, _errorMessage(res));
+      throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
     final list = jsonDecode(res.body) as List;
     return list
@@ -76,14 +82,18 @@ class BridgeProvisioningClient {
         .toList();
   }
 
-  Future<List<BridgeContact>> searchUsers(String query) async {
+  Future<List<BridgeContact>> searchUsers(
+    String bridgeId,
+    String bridgeLabel,
+    String query,
+  ) async {
     final res = await http.post(
-      _uri('/search_users'),
-      headers: {..._headers, 'Content-Type': 'application/json'},
+      await _uri('/bridges/$bridgeId/search_users'),
+      headers: await _authHeaders(),
       body: jsonEncode({'query': query}),
     );
     if (res.statusCode != 200) {
-      throw BridgeProvisioningException(bridge.label, _errorMessage(res));
+      throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
     final list = jsonDecode(res.body) as List;
     return list
@@ -91,25 +101,32 @@ class BridgeProvisioningClient {
         .toList();
   }
 
-  /// Resolves an identifier to a room, creating the DM if [createChat] is
-  /// true (needed for Google Messages, which has no create_dm endpoint of
-  /// its own - resolve_identifier does double duty).
-  Future<String> resolveIdentifier(String id, {bool createChat = false}) async {
+  Future<String> resolveIdentifier(
+    String bridgeId,
+    String bridgeLabel,
+    String id, {
+    bool createChat = false,
+  }) async {
     final res = await http.get(
-      _uri('/resolve_identifier/$id', {'create_chat': createChat.toString()}),
-      headers: _headers,
+      await _uri(
+        '/bridges/$bridgeId/resolve_identifier/$id?create_chat=$createChat',
+      ),
+      headers: await _authHeaders(),
     );
     if (res.statusCode != 200) {
-      throw BridgeProvisioningException(bridge.label, _errorMessage(res));
+      throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
     final json = jsonDecode(res.body) as Map<String, Object?>;
     return json['dm_room_mxid'] as String;
   }
 
-  Future<String> createDm(String id) async {
-    final res = await http.post(_uri('/create_dm/$id'), headers: _headers);
+  Future<String> createDm(String bridgeId, String bridgeLabel, String id) async {
+    final res = await http.post(
+      await _uri('/bridges/$bridgeId/create_dm/$id'),
+      headers: await _authHeaders(),
+    );
     if (res.statusCode != 200) {
-      throw BridgeProvisioningException(bridge.label, _errorMessage(res));
+      throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
     final json = jsonDecode(res.body) as Map<String, Object?>;
     return json['dm_room_mxid'] as String;

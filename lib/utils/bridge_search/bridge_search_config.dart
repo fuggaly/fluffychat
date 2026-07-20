@@ -16,13 +16,11 @@ class BridgeSearchConfig {
       id: 'whatsapp',
       kind: BridgeKind.whatsapp,
       label: 'WhatsApp',
-      baseUrl: 'https://whatsapp.matrix.fuggaly.com',
     ),
     ConfiguredBridge(
       id: 'gmessages',
       kind: BridgeKind.googleMessages,
       label: 'Google Messages',
-      baseUrl: 'https://gmessages.matrix.fuggaly.com',
     ),
   ];
 

@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:fluffychat/pages/bridge_search/bridge_search_view.dart';
 import 'package:fluffychat/utils/bridge_search/bridge_provisioning_client.dart';
+import 'package:fluffychat/utils/bridge_search/bridge_relay_config.dart';
 import 'package:fluffychat/utils/bridge_search/bridge_search_config.dart';
 import 'package:fluffychat/utils/bridge_search/configured_bridge.dart';
 import 'package:fluffychat/widgets/future_loading_dialog.dart';
-import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -25,10 +25,12 @@ class BridgeSearch extends StatefulWidget {
 
 class BridgeSearchController extends State<BridgeSearch> {
   final TextEditingController searchController = TextEditingController();
+  final BridgeProvisioningClient _relayClient = BridgeProvisioningClient();
   List<ConfiguredBridge> bridges = [];
   List<BridgeSearchResult> results = [];
   final Map<String, String> bridgeErrors = {}; // bridge id -> error message
   bool loading = true;
+  bool relayConfigured = true;
   Timer? _debounce;
   final Map<String, List<BridgeContact>> _contactsCache = {};
 
@@ -40,16 +42,8 @@ class BridgeSearchController extends State<BridgeSearch> {
 
   Future<void> _init() async {
     bridges = await BridgeSearchConfig.getBridges();
+    relayConfigured = await BridgeRelayConfig.isConfigured();
     if (mounted) setState(() => loading = false);
-  }
-
-  BridgeProvisioningClient _clientFor(ConfiguredBridge bridge) {
-    final client = Matrix.of(context).client;
-    return BridgeProvisioningClient(
-      bridge: bridge,
-      matrixAccessToken: client.accessToken!,
-      matrixUserId: client.userID!,
-    );
   }
 
   void onQueryChanged(String query) {
@@ -73,10 +67,10 @@ class BridgeSearchController extends State<BridgeSearch> {
       try {
         List<BridgeContact> matches;
         if (bridge.kind.supportsSearchUsers) {
-          matches = await _clientFor(bridge).searchUsers(query);
+          matches = await _relayClient.searchUsers(bridge.id, bridge.label, query);
         } else if (bridge.kind.supportsContactsList) {
           final contacts = _contactsCache[bridge.id] ??=
-              await _clientFor(bridge).contacts();
+              await _relayClient.contacts(bridge.id, bridge.label);
           final lowerQuery = query.toLowerCase();
           matches = contacts
               .where(
@@ -109,11 +103,15 @@ class BridgeSearchController extends State<BridgeSearch> {
     final roomId = await showFutureLoadingDialog(
       context: context,
       future: () async {
-        final client = _clientFor(result.bridge);
-        return result.bridge.kind.supportsContactsList &&
-                !result.bridge.kind.supportsSearchUsers
-            ? client.resolveIdentifier(result.contact.id, createChat: true)
-            : client.createDm(result.contact.id);
+        final bridge = result.bridge;
+        return bridge.kind.supportsContactsList && !bridge.kind.supportsSearchUsers
+            ? _relayClient.resolveIdentifier(
+                bridge.id,
+                bridge.label,
+                result.contact.id,
+                createChat: true,
+              )
+            : _relayClient.createDm(bridge.id, bridge.label, result.contact.id);
       },
     );
     if (roomId.error != null || !mounted) return;

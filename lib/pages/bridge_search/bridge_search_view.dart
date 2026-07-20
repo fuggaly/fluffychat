@@ -18,6 +18,16 @@ class BridgeSearchView extends StatelessWidget {
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator.adaptive())
+          : !controller.relayConfigured
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Text(
+                  'Bridge search is not configured yet - set the relay URL and token in Chat settings first.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            )
           : Column(
               children: [
                 Padding(
