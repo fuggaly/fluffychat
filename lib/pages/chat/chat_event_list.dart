@@ -98,7 +98,13 @@ class ChatEventList extends StatelessWidget {
                   children: [
                     if (events.isNotEmpty) SeenByRow(event: events.first),
                     if (controller.pendingScheduledMessages.isNotEmpty)
-                      PendingScheduledMessages(controller),
+                      PendingScheduledMessages(
+                        messages: controller.pendingScheduledMessages,
+                        onSendNow: controller.sendScheduledMessageNow,
+                        onEditAndSendNow:
+                            controller.editAndSendScheduledMessageNow,
+                        onCancel: controller.cancelScheduledMessage,
+                      ),
                     TypingIndicators(controller),
                     EncryptionInfo(room: controller.room),
                   ],

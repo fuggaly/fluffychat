@@ -4,35 +4,61 @@ import 'package:fluffychat/utils/date_time_extension.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
 import 'package:flutter/material.dart';
 
-import 'chat.dart';
-
-/// Shows this room's own Delay Send queue as faded "ghost" bubbles above
-/// the composer, so a message written for later doesn't get forgotten (or
+/// Shows a room's own Delay Send queue as faded "ghost" bubbles above the
+/// composer, so a message written for later doesn't get forgotten (or
 /// duplicated) mid-conversation - each one can be sent immediately, edited
 /// and sent immediately, or cancelled right from here instead of needing
 /// to go find it in Delay Send settings.
+///
+/// Takes plain callbacks rather than a ChatController so both a normal
+/// room's chat view and the unified/merged conversation view (which has
+/// its own controller and needs to resolve each message's actual
+/// underlying bridge room, not just "the" room) can reuse it as-is.
 class PendingScheduledMessages extends StatelessWidget {
-  final ChatController controller;
+  final List<ScheduledMessage> messages;
+  final void Function(ScheduledMessage) onSendNow;
+  final void Function(ScheduledMessage) onEditAndSendNow;
+  final void Function(ScheduledMessage) onCancel;
 
-  const PendingScheduledMessages(this.controller, {super.key});
+  const PendingScheduledMessages({
+    required this.messages,
+    required this.onSendNow,
+    required this.onEditAndSendNow,
+    required this.onCancel,
+    super.key,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
-      children: controller.pendingScheduledMessages
-          .map((msg) => _PendingScheduledMessage(controller: controller, msg: msg))
+      children: messages
+          .map(
+            (msg) => _PendingScheduledMessage(
+              msg: msg,
+              onSendNow: onSendNow,
+              onEditAndSendNow: onEditAndSendNow,
+              onCancel: onCancel,
+            ),
+          )
           .toList(),
     );
   }
 }
 
 class _PendingScheduledMessage extends StatelessWidget {
-  final ChatController controller;
   final ScheduledMessage msg;
+  final void Function(ScheduledMessage) onSendNow;
+  final void Function(ScheduledMessage) onEditAndSendNow;
+  final void Function(ScheduledMessage) onCancel;
 
-  const _PendingScheduledMessage({required this.controller, required this.msg});
+  const _PendingScheduledMessage({
+    required this.msg,
+    required this.onSendNow,
+    required this.onEditAndSendNow,
+    required this.onCancel,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -94,21 +120,17 @@ class _PendingScheduledMessage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextButton(
-                onPressed: msg.attempts > 0
-                    ? null
-                    : () => controller.sendScheduledMessageNow(msg),
+                onPressed: msg.attempts > 0 ? null : () => onSendNow(msg),
                 child: const Text('Send now'),
               ),
               TextButton(
                 onPressed: msg.attempts > 0
                     ? null
-                    : () => controller.editAndSendScheduledMessageNow(msg),
+                    : () => onEditAndSendNow(msg),
                 child: const Text('Edit & send'),
               ),
               TextButton(
-                onPressed: msg.attempts > 0
-                    ? null
-                    : () => controller.cancelScheduledMessage(msg),
+                onPressed: msg.attempts > 0 ? null : () => onCancel(msg),
                 child: const Text('Cancel'),
               ),
             ],

@@ -2,6 +2,7 @@ import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/config/themes.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/events/message.dart';
+import 'package:fluffychat/pages/chat/pending_scheduled_messages.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
 import 'package:fluffychat/utils/date_time_extension.dart';
@@ -214,6 +215,22 @@ class UnifiedChatView extends StatelessWidget {
                     },
                   ),
                 ),
+                if (controller.pendingScheduledMessages.isNotEmpty)
+                  Align(
+                    alignment: Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: FluffyThemes.maxTimelineWidth,
+                      ),
+                      child: PendingScheduledMessages(
+                        messages: controller.pendingScheduledMessages,
+                        onSendNow: controller.sendScheduledMessageNow,
+                        onEditAndSendNow:
+                            controller.editAndSendScheduledMessageNow,
+                        onCancel: controller.cancelScheduledMessage,
+                      ),
+                    ),
+                  ),
                 SafeArea(
                   child: Builder(
                     builder: (context) {

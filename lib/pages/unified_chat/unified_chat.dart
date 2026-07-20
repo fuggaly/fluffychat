@@ -1,5 +1,6 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/chat.dart' show AddPopupMenuActions;
 import 'package:fluffychat/pages/chat/send_file_dialog.dart';
 import 'package:fluffychat/pages/chat/send_location_dialog.dart';
@@ -13,6 +14,8 @@ import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_config.dart';
 import 'package:fluffychat/utils/file_selector.dart';
+import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.dart';
+import 'package:fluffychat/widgets/adaptive_dialogs/show_text_input_dialog.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -103,6 +106,96 @@ class UnifiedChatController extends State<UnifiedChat> {
 
     if (!mounted) return;
     setState(() => loading = false);
+    await _loadPendingScheduledMessages();
+  }
+
+  List<ScheduledMessage> pendingScheduledMessages = [];
+
+  /// Same idea as ChatController's own version, but a scheduled message
+  /// could target any of this group's member rooms (not just whichever
+  /// one is currently selected in the network dropdown), so this filters
+  /// against the whole group instead of a single room id.
+  Future<void> _loadPendingScheduledMessages() async {
+    final currentGroup = group;
+    if (currentGroup == null) return;
+    if (!await SchedulerConfig.isConfigured()) return;
+    try {
+      final all = await SchedulerApiClient().listPending();
+      if (!mounted) return;
+      setState(() {
+        pendingScheduledMessages =
+            all.where((m) => currentGroup.roomIds.contains(m.roomId)).toList()
+              ..sort((a, b) => a.sendAt.compareTo(b.sendAt));
+      });
+    } on SchedulerApiException {
+      // Ignored - see ChatController's own version for rationale.
+    }
+  }
+
+  Future<void> sendScheduledMessageNow(ScheduledMessage msg) async {
+    final room = client.getRoomById(msg.roomId);
+    if (room == null) return;
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send now: ${e.message}')),
+      );
+      return;
+    }
+    // ignore: unawaited_futures
+    room.sendTextEvent(msg.body);
+    await _loadPendingScheduledMessages();
+  }
+
+  Future<void> editAndSendScheduledMessageNow(ScheduledMessage msg) async {
+    final room = client.getRoomById(msg.roomId);
+    if (room == null) return;
+    final newBody = await showTextInputDialog(
+      context: context,
+      title: 'Edit message',
+      initialText: msg.body,
+      minLines: 1,
+      maxLines: 8,
+      okLabel: L10n.of(context).send,
+      cancelLabel: L10n.of(context).cancel,
+    );
+    if (newBody == null || newBody.trim().isEmpty || !mounted) return;
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send now: ${e.message}')),
+      );
+      return;
+    }
+    // ignore: unawaited_futures
+    room.sendTextEvent(newBody);
+    await _loadPendingScheduledMessages();
+  }
+
+  Future<void> cancelScheduledMessage(ScheduledMessage msg) async {
+    final confirmed = await showOkCancelAlertDialog(
+      context: context,
+      title: 'Cancel scheduled message?',
+      message: msg.body,
+      okLabel: 'Cancel it',
+      cancelLabel: 'Keep it',
+      isDestructive: true,
+    );
+    if (confirmed != OkCancelResult.ok) return;
+    try {
+      await SchedulerApiClient().cancel(msg.id);
+    } on SchedulerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not cancel: ${e.message}')),
+      );
+      return;
+    }
+    await _loadPendingScheduledMessages();
   }
 
   /// All message events from every member room's timeline, newest first.
@@ -223,6 +316,7 @@ class UnifiedChatController extends State<UnifiedChat> {
       ),
     );
     setState(() {});
+    await _loadPendingScheduledMessages();
   }
 
   bool showEmojiPicker = false;
