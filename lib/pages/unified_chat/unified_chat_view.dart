@@ -1,5 +1,6 @@
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/config/themes.dart';
+import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/events/message.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
@@ -64,8 +65,44 @@ class UnifiedChatView extends StatelessWidget {
                       return ListView.builder(
                         reverse: true,
                         padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: events.length,
+                        itemCount: events.length + 1,
                         itemBuilder: (context, i) {
+                          // Footer (reversed list, so this renders at the
+                          // visual top): mirrors chat_event_list.dart's
+                          // "load more history" row. Being built at all
+                          // means the user has scrolled close to it, so
+                          // that alone triggers the same auto-load a
+                          // normal room does.
+                          if (i == events.length) {
+                            if (!controller.canRequestHistory) {
+                              return const SizedBox.shrink();
+                            }
+                            WidgetsBinding.instance.addPostFrameCallback(
+                              controller.requestHistory,
+                            );
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                ),
+                                child: TextButton.icon(
+                                  onPressed: controller.isRequestingHistory
+                                      ? null
+                                      : controller.requestHistory,
+                                  icon: controller.isRequestingHistory
+                                      ? const SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator
+                                              .adaptive(strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.arrow_upward_outlined),
+                                  label: Text(L10n.of(context).loadMore),
+                                ),
+                              ),
+                            );
+                          }
+
                           final event = events[i];
                           // Same index convention as chat_event_list.dart:
                           // events are newest-first, so index i+1 is the

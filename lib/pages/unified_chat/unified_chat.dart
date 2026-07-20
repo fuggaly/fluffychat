@@ -92,6 +92,30 @@ class UnifiedChatController extends State<UnifiedChat> {
     return events;
   }
 
+  static const int _loadHistoryCount = 100;
+
+  /// Whether any member room's timeline still has older history to load -
+  /// scrolling to the top should keep working until every one of them says
+  /// no.
+  bool get canRequestHistory =>
+      timelines.values.any((timeline) => timeline.canRequestHistory);
+
+  bool get isRequestingHistory =>
+      timelines.values.any((timeline) => timeline.isRequestingHistory);
+
+  /// Pages back every member room's timeline in parallel. A single merged
+  /// ListView has no per-room "top" to hit, so unlike a normal room this
+  /// can't request history from just one Timeline - otherwise a room that
+  /// happens to have less history than its sibling would silently stop
+  /// contributing older messages to the merge while the other kept going.
+  Future<void> requestHistory([_]) async {
+    await Future.wait([
+      for (final timeline in timelines.values)
+        if (timeline.canRequestHistory)
+          timeline.requestHistory(historyCount: _loadHistoryCount),
+    ]);
+  }
+
   String labelForRoom(String roomId) =>
       effectiveRoomLabel(client.getRoomById(roomId), group?.roomLabels[roomId]);
 
