@@ -10,6 +10,8 @@ import 'package:cross_file/cross_file.dart';
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat_list/chat_list_view.dart';
+import 'package:fluffychat/utils/bridge_unification/known_bridge_bots.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/error_reporter.dart';
 import 'package:fluffychat/utils/localized_exception_extension.dart';
 import 'package:fluffychat/utils/matrix_sdk_extensions/matrix_locals.dart';
@@ -131,6 +133,12 @@ class ChatListController extends State<ChatList>
       return;
     }
 
+    final group = UnifiedContactsService.groupForRoom(room.client, room.id);
+    if (group != null) {
+      context.go('/rooms/unified/${group.id}');
+      return;
+    }
+
     context.go('/rooms/${room.id}');
   }
 
@@ -149,9 +157,15 @@ class ChatListController extends State<ChatList>
     }
   }
 
-  List<Room> get filteredRooms => Matrix.of(
-    context,
-  ).client.rooms.where(getRoomFilterByActiveFilter(activeFilter)).toList();
+  List<Room> get filteredRooms => Matrix.of(context)
+      .client
+      .rooms
+      .where(getRoomFilterByActiveFilter(activeFilter))
+      // Bridge admin/management-room DMs (e.g. @whatsappbot) aren't
+      // conversations - hide them the same way autobot.mjs's own
+      // IGNORE_ROOMS does server-side.
+      .where((room) => !isBridgeManagementRoom(room))
+      .toList();
 
   bool isSearchMode = false;
   Future<QueryPublicRoomsResponse>? publicRoomsResponse;

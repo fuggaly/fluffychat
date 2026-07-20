@@ -33,7 +33,9 @@ import 'package:fluffychat/pages/settings_notifications/settings_notifications.d
 import 'package:fluffychat/pages/settings_password/settings_password.dart';
 import 'package:fluffychat/pages/settings_security/settings_security.dart';
 import 'package:fluffychat/pages/settings_style/settings_style.dart';
+import 'package:fluffychat/pages/settings_unified_contacts/settings_unified_contacts.dart';
 import 'package:fluffychat/pages/sign_in/sign_in_page.dart';
+import 'package:fluffychat/pages/unified_chat/unified_chat.dart';
 import 'package:fluffychat/widgets/config_viewer.dart';
 import 'package:fluffychat/widgets/layouts/empty_page.dart';
 import 'package:fluffychat/widgets/layouts/two_column_layout.dart';
@@ -173,6 +175,21 @@ abstract class AppRoutes {
               redirect: loggedOutRedirect,
             ),
             GoRoute(
+              path: 'unified',
+              redirect: loggedOutRedirect,
+              routes: [
+                GoRoute(
+                  path: ':groupid',
+                  pageBuilder: (context, state) => defaultPageBuilder(
+                    context,
+                    state,
+                    UnifiedChat(groupId: state.pathParameters['groupid']!),
+                  ),
+                  redirect: loggedOutRedirect,
+                ),
+              ],
+            ),
+            GoRoute(
               path: 'newprivatechat',
               pageBuilder: (context, state) => defaultPageBuilder(
                 context,
@@ -279,6 +296,14 @@ abstract class AppRoutes {
                             context,
                             state,
                             const SettingsDelaySend(),
+                          ),
+                        ),
+                        GoRoute(
+                          path: 'unified_contacts',
+                          pageBuilder: (context, state) => defaultPageBuilder(
+                            context,
+                            state,
+                            const SettingsUnifiedContacts(),
                           ),
                         ),
                       ],

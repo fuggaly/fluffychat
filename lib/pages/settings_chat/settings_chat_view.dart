@@ -109,6 +109,17 @@ class SettingsChatView extends StatelessWidget {
                   child: Icon(Icons.chevron_right_outlined),
                 ),
               ),
+              ListTile(
+                title: const Text('Unified Contacts'),
+                subtitle: const Text(
+                  'Merge multiple bridged rooms for the same contact into one conversation',
+                ),
+                onTap: () => context.go('/rooms/settings/chat/unified_contacts'),
+                trailing: const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Icon(Icons.chevron_right_outlined),
+                ),
+              ),
               Divider(color: theme.dividerColor),
               ListTile(
                 title: Text(
