@@ -550,7 +550,11 @@ class Message extends StatelessWidget {
                               mainAxisAlignment: ownMessage ? .end : .start,
                               children: [
                                 const SizedBox(width: 8),
-                                if (networkIcon != null) ...[
+                                if (networkIcon != null &&
+                                    event.status.isSent &&
+                                    (displayTime ||
+                                        !previousEventSameSender ||
+                                        selected)) ...[
                                   networkIcon!,
                                   const SizedBox(width: 4),
                                 ],
