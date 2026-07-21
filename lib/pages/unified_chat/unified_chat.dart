@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluffychat/config/setting_keys.dart';
@@ -99,10 +101,36 @@ class UnifiedChatController extends State<UnifiedChat> {
     }
   }
 
-  /// Triggers a rebuild as the composer text changes, so the attach
-  /// button's hide-while-typing animation (see UnifiedChatInputRow)
-  /// reacts the same way ChatInputRow's does.
-  void onInputChanged() => setState(() {});
+  Timer? _typingCoolDown;
+  Timer? _typingTimeout;
+  bool _currentlyTyping = false;
+
+  /// Triggers a rebuild as the composer text changes (so the attach
+  /// button's hide-while-typing animation - see UnifiedChatInputRow -
+  /// reacts the same way ChatInputRow's does), and mirrors
+  /// ChatController.onInputBarChanged's debounced room.setTyping() calls
+  /// so the other party sees a typing indicator too, not just this app
+  /// showing theirs.
+  void onInputChanged() {
+    setState(() {});
+    final room = selectedRoom;
+    if (room == null || !AppSettings.sendTypingNotifications.value) return;
+
+    _typingCoolDown?.cancel();
+    _typingCoolDown = Timer(const Duration(seconds: 2), () {
+      _typingCoolDown = null;
+      _currentlyTyping = false;
+      room.setTyping(false);
+    });
+    _typingTimeout ??= Timer(const Duration(seconds: 30), () {
+      _typingTimeout = null;
+      _currentlyTyping = false;
+    });
+    if (!_currentlyTyping) {
+      _currentlyTyping = true;
+      room.setTyping(true, timeout: const Duration(seconds: 30).inMilliseconds);
+    }
+  }
 
   // Same computation ChatController itself uses (large-emoji-only
   // messages render bigger) - reused as-is so message rendering styling
@@ -521,6 +549,13 @@ class UnifiedChatController extends State<UnifiedChat> {
 
   @override
   void dispose() {
+    // Not explicitly clearing typing state here (unlike ChatController,
+    // which can since it keeps its own client/room references as plain
+    // fields) - selectedRoom depends on Matrix.of(context), which isn't
+    // safe to call during dispose. The 30s server-side timeout passed to
+    // setTyping above already bounds how long a stale indicator can show.
+    _typingCoolDown?.cancel();
+    _typingTimeout?.cancel();
     sendController.dispose();
     scrollController.dispose();
     inputFocus.dispose();

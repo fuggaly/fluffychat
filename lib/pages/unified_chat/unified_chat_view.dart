@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import 'unified_chat.dart';
 import 'unified_chat_emoji_picker.dart';
 import 'unified_chat_input_row.dart';
+import 'unified_typing_indicators.dart';
 
 class UnifiedChatView extends StatelessWidget {
   final UnifiedChatController controller;
@@ -231,6 +232,7 @@ class UnifiedChatView extends StatelessWidget {
                       ),
                     ),
                   ),
+                UnifiedTypingIndicators(controller),
                 SafeArea(
                   child: Builder(
                     builder: (context) {

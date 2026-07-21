@@ -1,38 +1,46 @@
-// SPDX-FileCopyrightText: 2019-Present Christian Kußowski
-// SPDX-FileCopyrightText: 2019-Present Contributors to FluffyChat
-//
-// SPDX-License-Identifier: AGPL-3.0-or-later
-
-import 'dart:async';
-
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/config/themes.dart';
-import 'package:fluffychat/pages/chat/chat.dart';
+import 'package:fluffychat/pages/chat/typing_indicators.dart' show TypingDots;
 import 'package:fluffychat/widgets/avatar.dart';
-import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:matrix/matrix.dart';
 
-class TypingIndicators extends StatelessWidget {
-  final ChatController controller;
-  const TypingIndicators(this.controller, {super.key});
+import 'unified_chat.dart';
+
+/// Mirrors [TypingIndicators], but a merged conversation has no single
+/// room to watch - it's typing state unioned across every member room, so
+/// someone typing on either the WhatsApp or SMS side of a merged contact
+/// shows up the same way.
+class UnifiedTypingIndicators extends StatelessWidget {
+  final UnifiedChatController controller;
+
+  const UnifiedTypingIndicators(this.controller, {super.key});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final group = controller.group;
+    if (group == null) return const SizedBox.shrink();
 
     const avatarSize = Avatar.defaultSize / 2;
 
     return StreamBuilder<Object>(
-      stream: controller.room.client.onSync.stream.where(
-        (syncUpdate) =>
-            syncUpdate.rooms?.join?[controller.room.id]?.ephemeral?.any(
-              (ephemeral) => ephemeral.type == 'm.typing',
-            ) ??
-            false,
+      stream: controller.client.onSync.stream.where(
+        (syncUpdate) => group.roomIds.any(
+          (roomId) =>
+              syncUpdate.rooms?.join?[roomId]?.ephemeral?.any(
+                (ephemeral) => ephemeral.type == 'm.typing',
+              ) ??
+              false,
+        ),
       ),
       builder: (context, _) {
-        final typingUsers = controller.room.typingUsers
-          ..removeWhere((u) => u.stateKey == Matrix.of(context).client.userID);
+        final typingUsers = <User>[
+          for (final roomId in group.roomIds)
+            ...?controller.client.getRoomById(roomId)?.typingUsers,
+        ]..removeWhere((u) => u.stateKey == controller.client.userID);
+
+        final mergedEvents = controller.mergedEvents;
 
         return Container(
           width: double.infinity,
@@ -45,9 +53,8 @@ class TypingIndicators extends StatelessWidget {
             duration: FluffyThemes.animationDuration,
             curve: FluffyThemes.animationCurve,
             alignment:
-                controller.timeline!.events.isNotEmpty &&
-                    controller.timeline!.events.first.senderId ==
-                        Matrix.of(context).client.userID
+                mergedEvents.isNotEmpty &&
+                    mergedEvents.first.senderId == controller.client.userID
                 ? Alignment.topRight
                 : Alignment.topLeft,
             clipBehavior: Clip.hardEdge,
@@ -99,67 +106,6 @@ class TypingIndicators extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class TypingDots extends StatefulWidget {
-  const TypingDots({super.key});
-
-  @override
-  State<TypingDots> createState() => _TypingDotsState();
-}
-
-class _TypingDotsState extends State<TypingDots> {
-  int _tick = 0;
-
-  late final Timer _timer;
-
-  static const Duration animationDuration = Duration(milliseconds: 300);
-
-  @override
-  void initState() {
-    _timer = Timer.periodic(animationDuration, (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _tick = (_tick + 1) % 4;
-      });
-    });
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    const size = 8.0;
-
-    return Row(
-      mainAxisSize: .min,
-      children: [
-        for (var i = 1; i <= 3; i++)
-          AnimatedContainer(
-            duration: animationDuration * 1.5,
-            curve: FluffyThemes.animationCurve,
-            width: size,
-            height: _tick == i ? size * 2 : size,
-            margin: EdgeInsets.symmetric(
-              horizontal: 2,
-              vertical: _tick == i ? 4 : 8,
-            ),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(size * 2),
-              color: theme.colorScheme.secondary,
-            ),
-          ),
-      ],
     );
   }
 }
