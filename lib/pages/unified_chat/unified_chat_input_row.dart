@@ -1,3 +1,4 @@
+import 'package:fluffychat/config/setting_keys.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/chat.dart' show AddPopupMenuActions;
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
@@ -204,6 +205,11 @@ class UnifiedChatInputRow extends StatelessWidget {
               maxLines: 8,
               autofocus: !PlatformInfos.isMobile,
               keyboardType: TextInputType.multiline,
+              textInputAction:
+                  AppSettings.sendOnEnter.value == true &&
+                      PlatformInfos.isMobile
+                  ? TextInputAction.send
+                  : null,
               focusNode: controller.inputFocus,
               controller: controller.sendController,
               decoration: InputDecoration(

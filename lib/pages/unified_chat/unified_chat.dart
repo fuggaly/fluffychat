@@ -19,6 +19,7 @@ import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.
 import 'package:fluffychat/widgets/adaptive_dialogs/show_text_input_dialog.dart';
 import 'package:fluffychat/widgets/matrix.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
 
@@ -38,10 +39,65 @@ class UnifiedChatController extends State<UnifiedChat> {
   final Map<String, Timeline> timelines = {};
   final TextEditingController sendController = TextEditingController();
   final ScrollController scrollController = ScrollController();
-  final FocusNode inputFocus = FocusNode();
+  late final FocusNode inputFocus;
   bool loading = true;
   String? selectedRoomId;
   bool _timelinesRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Enter-to-send is implemented via a custom key handler on the
+    // TextField's own FocusNode, not TextField.textInputAction (that only
+    // affects mobile virtual keyboards) - a plain FocusNode() here meant
+    // Enter always just inserted a newline regardless of the Send on
+    // Enter setting. Mirrors ChatController's own _customEnterKeyHandling,
+    // minus the arrow-up-to-edit-last-message and escape-to-cancel-edit
+    // shortcuts, which depend on reply/edit state this composer doesn't
+    // have.
+    inputFocus = FocusNode(onKeyEvent: _customEnterKeyHandling);
+  }
+
+  KeyEventResult _customEnterKeyHandling(FocusNode node, KeyEvent evt) {
+    if (!HardwareKeyboard.instance.isShiftPressed &&
+        evt.logicalKey.keyLabel == 'Enter' &&
+        AppSettings.sendOnEnter.value) {
+      if (evt is KeyDownEvent) {
+        send();
+      }
+      return KeyEventResult.handled;
+    } else if (evt.logicalKey.keyLabel == 'Enter' && evt is KeyDownEvent) {
+      final currentLineNum =
+          sendController.text
+              .substring(0, sendController.selection.baseOffset)
+              .split('\n')
+              .length -
+          1;
+      final currentLine = sendController.text.split('\n')[currentLineNum];
+
+      for (final pattern in [
+        '- [ ] ',
+        '- [x] ',
+        '* [ ] ',
+        '* [x] ',
+        '- ',
+        '* ',
+        '+ ',
+      ]) {
+        if (currentLine.startsWith(pattern)) {
+          if (currentLine == pattern) {
+            return KeyEventResult.ignored;
+          }
+          sendController.text += '\n$pattern';
+          return KeyEventResult.handled;
+        }
+      }
+
+      return KeyEventResult.ignored;
+    } else {
+      return KeyEventResult.ignored;
+    }
+  }
 
   /// Triggers a rebuild as the composer text changes, so the attach
   /// button's hide-while-typing animation (see UnifiedChatInputRow)
