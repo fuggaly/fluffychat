@@ -1,4 +1,5 @@
 import 'package:fluffychat/pages/settings_unified_contacts/room_picker_dialog.dart';
+import 'package:fluffychat/utils/bridge_unification/bridge_group_suggestions.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
@@ -20,6 +21,16 @@ class SettingsUnifiedContacts extends StatefulWidget {
 }
 
 class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
+  // Suggestions are recomputed fresh every build (nothing persisted), so a
+  // dismissed one is only remembered for this screen visit - re-opening
+  // this page later will offer it again. Acceptable: the phone-matching
+  // heuristic is narrow enough that repeat false positives should be rare,
+  // and dismissing is a single tap either way.
+  final Set<String> _dismissedSuggestionKeys = {};
+
+  String _suggestionKey(SuggestedGroup suggestion) =>
+      (suggestion.roomIds.toList()..sort()).join(',');
+
   String _roomDisplayName(Client client, String roomId) {
     final room = client.getRoomById(roomId);
     if (room == null) return roomId;
@@ -52,13 +63,34 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
       final room = client.getRoomById(roomId);
       if (room == null) continue;
       roomLabels[roomId] =
-          bridgeLabelForRoom(room) ?? stripViaSuffix(room.getLocalizedDisplayname());
+          bridgeLabelForRoom(room) ??
+          stripViaSuffix(room.getLocalizedDisplayname());
     }
 
     await UnifiedContactsService.createGroup(
       client,
       label: label.trim(),
       roomIds: selectedRoomIds.toList(),
+      roomLabels: roomLabels,
+    );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _mergeSuggestion(SuggestedGroup suggestion) async {
+    final client = Matrix.of(context).client;
+    final roomLabels = <String, String>{};
+    for (final roomId in suggestion.roomIds) {
+      final room = client.getRoomById(roomId);
+      if (room == null) continue;
+      roomLabels[roomId] =
+          bridgeLabelForRoom(room) ??
+          stripViaSuffix(room.getLocalizedDisplayname());
+    }
+    await UnifiedContactsService.createGroup(
+      client,
+      label: suggestion.suggestedLabel,
+      roomIds: suggestion.roomIds,
       roomLabels: roomLabels,
     );
     if (!mounted) return;
@@ -87,6 +119,9 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
   Widget build(BuildContext context) {
     final client = Matrix.of(context).client;
     final groups = UnifiedContactsService.getGroups(client);
+    final suggestions = findSuggestedGroupings(client)
+        .where((s) => !_dismissedSuggestionKeys.contains(_suggestionKey(s)))
+        .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Unified Contacts')),
@@ -95,7 +130,7 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
         icon: const Icon(Icons.merge_outlined),
         label: const Text('Merge rooms'),
       ),
-      body: groups.isEmpty
+      body: groups.isEmpty && suggestions.isEmpty
           ? const Center(
               child: Padding(
                 padding: EdgeInsets.all(32),
@@ -107,45 +142,90 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
             )
           : ListView(
               padding: const EdgeInsets.all(16),
-              children: groups
-                  .map(
-                    (group) => Card(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ListTile(
-                            title: Text(group.label),
-                            subtitle: const Text(
-                              'Tap a room below to open it individually (not merged)',
-                            ),
-                            trailing: IconButton(
-                              tooltip: 'Un-merge',
+              children: [
+                if (suggestions.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8, left: 4),
+                    child: Text(
+                      'Suggested - same phone number seen on two networks',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                  ...suggestions.map(
+                    (suggestion) => Card(
+                      child: ListTile(
+                        title: Text(suggestion.suggestedLabel),
+                        subtitle: Text(
+                          suggestion.roomIds
+                              .map(
+                                (id) => effectiveRoomLabel(
+                                  client.getRoomById(id),
+                                  null,
+                                ),
+                              )
+                              .join(' + '),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Dismiss',
                               icon: const Icon(Icons.close_outlined),
-                              onPressed: () => _deleteGroup(group),
-                            ),
-                          ),
-                          ...group.roomIds.map((id) {
-                            final label = effectiveRoomLabel(
-                              client.getRoomById(id),
-                              group.roomLabels[id],
-                            );
-                            return ListTile(
-                              dense: true,
-                              leading: FaIcon(
-                                iconForBridgeLabel(label),
-                                color: colorForBridgeLabel(label),
+                              onPressed: () => setState(
+                                () => _dismissedSuggestionKeys.add(
+                                  _suggestionKey(suggestion),
+                                ),
                               ),
-                              title: Text(label),
-                              subtitle: Text(_roomDisplayName(client, id)),
-                              trailing: const Icon(Icons.chevron_right_outlined),
-                              onTap: () => context.go('/rooms/$id'),
-                            );
-                          }),
-                        ],
+                            ),
+                            FilledButton.tonal(
+                              onPressed: () => _mergeSuggestion(suggestion),
+                              child: const Text('Merge'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  )
-                  .toList(),
+                  ),
+                  const Divider(height: 32),
+                ],
+                ...groups.map(
+                  (group) => Card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ListTile(
+                          title: Text(group.label),
+                          subtitle: const Text(
+                            'Tap a room below to open it individually (not merged)',
+                          ),
+                          trailing: IconButton(
+                            tooltip: 'Un-merge',
+                            icon: const Icon(Icons.close_outlined),
+                            onPressed: () => _deleteGroup(group),
+                          ),
+                        ),
+                        ...group.roomIds.map((id) {
+                          final label = effectiveRoomLabel(
+                            client.getRoomById(id),
+                            group.roomLabels[id],
+                          );
+                          return ListTile(
+                            dense: true,
+                            leading: FaIcon(
+                              iconForBridgeLabel(label),
+                              color: colorForBridgeLabel(label),
+                            ),
+                            title: Text(label),
+                            subtitle: Text(_roomDisplayName(client, id)),
+                            trailing: const Icon(Icons.chevron_right_outlined),
+                            onTap: () => context.go('/rooms/$id'),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
     );
   }

@@ -38,7 +38,9 @@ String effectiveRoomLabel(Room? room, String? storedLabel) {
     if (liveLabel != null) return liveLabel;
   }
   if (storedLabel != null && storedLabel.isNotEmpty) return storedLabel;
-  return room == null ? 'Unknown' : stripViaSuffix(room.getLocalizedDisplayname());
+  return room == null
+      ? 'Unknown'
+      : stripViaSuffix(room.getLocalizedDisplayname());
 }
 
 /// Bridged ghost/room display names are commonly suffixed by the bridge

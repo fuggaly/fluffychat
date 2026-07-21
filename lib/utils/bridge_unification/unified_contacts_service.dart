@@ -81,9 +81,7 @@ class UnifiedContactsService {
   ) async {
     final groups = getGroups(client);
     final updated = groups
-        .map(
-          (g) => g.id == groupId ? g.copyWith(lastUsedRoomId: roomId) : g,
-        )
+        .map((g) => g.id == groupId ? g.copyWith(lastUsedRoomId: roomId) : g)
         .toList();
     await _saveGroups(client, updated);
   }
