@@ -9,6 +9,7 @@ import 'dart:ui';
 
 import 'package:collection/collection.dart';
 import 'package:fluffychat/l10n/l10n.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/client_manager.dart';
 import 'package:fluffychat/utils/push_helper.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -150,11 +151,7 @@ Future<void> notificationTap(
             .waitForRoomInSync(roomId)
             .timeout(const Duration(seconds: 30));
       }
-      router.go(
-        client.getRoomById(roomId)?.membership == Membership.invite
-            ? '/rooms?client=${client.clientName}'
-            : '/rooms/$roomId?client=${client.clientName}',
-      );
+      router.go(_routeForRoom(client, roomId));
     case NotificationResponseType.selectedNotificationAction:
       final actionType = FluffyChatNotificationActions.values.singleWhereOrNull(
         (action) => action.name == notificationResponse.actionId,
@@ -198,13 +195,26 @@ Future<void> notificationTap(
         case FluffyChatNotificationActions.mute:
           await room.setPushRuleState(PushRuleState.mentionsOnly);
         case FluffyChatNotificationActions.open:
-          router?.go(
-            client.getRoomById(roomId)?.membership == Membership.invite
-                ? '/rooms?client=${client.clientName}'
-                : '/rooms/$roomId?client=${client.clientName}',
-          );
+          if (router != null) router.go(_routeForRoom(client, roomId));
       }
   }
+}
+
+/// A room that's part of a unified/merged conversation is hidden from the
+/// normal room list in favour of its synthetic unified entry - routing a
+/// notification tap straight to `/rooms/$roomId` for one would open that
+/// hidden individual room instead of the merged conversation the user
+/// actually sees elsewhere in the app, so redirect the same way
+/// ChatListController.onChatTap does.
+String _routeForRoom(Client client, String roomId) {
+  if (client.getRoomById(roomId)?.membership == Membership.invite) {
+    return '/rooms?client=${client.clientName}';
+  }
+  final unifiedGroup = UnifiedContactsService.groupForRoom(client, roomId);
+  if (unifiedGroup != null) {
+    return '/rooms/unified/${unifiedGroup.id}?client=${client.clientName}';
+  }
+  return '/rooms/$roomId?client=${client.clientName}';
 }
 
 enum FluffyChatNotificationActions { markAsRead, reply, mute, open }

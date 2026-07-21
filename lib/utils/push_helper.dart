@@ -12,6 +12,7 @@ import 'package:collection/collection.dart';
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/config/setting_keys.dart';
 import 'package:fluffychat/l10n/l10n.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/client_download_content_extension.dart';
 import 'package:fluffychat/utils/client_manager.dart';
 import 'package:fluffychat/utils/matrix_sdk_extensions/matrix_locals.dart';
@@ -143,13 +144,30 @@ Future<void> _tryPushHelper(
         (notification) => notification.groupKey != client.clientName,
       );
       var needsUpdateForSummaryNotification = false;
+      final unifiedGroups = UnifiedContactsService.getGroups(client);
       for (final activeNotification in activeNotifications) {
         final room = client.rooms.singleWhereOrNull(
           (room) =>
               '${client.clientName}_${room.id}'.hashCode ==
               activeNotification.id,
         );
-        if (room != null && !room.isUnreadOrInvited) {
+        // A merged conversation's notifications are posted under its group
+        // id, not any single room's id (see the id computation below) -
+        // without this, a notification for a unified contact would never
+        // get matched/cancelled here once everything's been read.
+        final group = room != null
+            ? null
+            : unifiedGroups.firstWhereOrNull(
+                (g) =>
+                    '${client.clientName}_${g.id}'.hashCode ==
+                    activeNotification.id,
+              );
+        final stillUnread = room?.isUnreadOrInvited ??
+            group?.roomIds.any(
+              (roomId) => client.getRoomById(roomId)?.isUnreadOrInvited ?? false,
+            ) ??
+            true;
+        if ((room != null || group != null) && !stillUnread) {
           flutterLocalNotificationsPlugin.cancel(id: activeNotification.id!);
           if (PlatformInfos.isAndroid) needsUpdateForSummaryNotification = true;
         }
@@ -207,8 +225,28 @@ Future<void> _tryPushHelper(
           removeMarkdown: true,
         );
 
+  // A merged conversation is several real, independent bridge rooms (e.g.
+  // one contact's WhatsApp room + their SMS room) that the app's UI
+  // presents as one - but each is its own Matrix room as far as push
+  // notifications are concerned, so without this a single contact could
+  // notify twice under two different names ("Contact via WhatsApp" /
+  // "Contact via SMS") for what's shown as one conversation. Route the
+  // notification's identity (id/title/sender name/avatar) through the
+  // group when the room is grouped, same as the merged chat view itself
+  // does - everything else (payload roomId, reply/mark-read/mute actions)
+  // stays keyed to the real underlying room.
+  final unifiedGroup = UnifiedContactsService.groupForRoom(
+    client,
+    event.room.id,
+  );
+
   // The person object for the android message style notification
-  final avatar = event.room.avatar;
+  final avatar =
+      event.room.avatar ??
+      unifiedGroup?.roomIds
+          .map((roomId) => client.getRoomById(roomId)?.avatar)
+          .whereType<Uri>()
+          .firstOrNull;
   final senderAvatar = event.room.isDirectChat
       ? avatar
       : event.senderFromMemoryOrFallback.avatarUrl;
@@ -223,9 +261,12 @@ Future<void> _tryPushHelper(
     senderAvatar,
   );
 
-  final id = '${client.clientName}_${notification.roomId}'.hashCode;
+  final id =
+      '${client.clientName}_${unifiedGroup?.id ?? notification.roomId}'
+          .hashCode;
 
-  final senderName = event.senderFromMemoryOrFallback.calcDisplayname();
+  final senderName =
+      unifiedGroup?.label ?? event.senderFromMemoryOrFallback.calcDisplayname();
   // Show notification
 
   final newMessage = Message(
@@ -338,7 +379,8 @@ Future<void> _tryPushHelper(
     iOS: iOSPlatformChannelSpecifics,
   );
 
-  final title = event.room.getLocalizedDisplayname(MatrixLocals(l10n));
+  final title =
+      unifiedGroup?.label ?? event.room.getLocalizedDisplayname(MatrixLocals(l10n));
 
   if (PlatformInfos.isAndroid && messagingStyleInformation == null) {
     await _setShortcut(event, l10n, title, roomAvatarFile);
