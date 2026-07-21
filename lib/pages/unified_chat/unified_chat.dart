@@ -1,5 +1,6 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:fluffychat/config/setting_keys.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/chat.dart' show AddPopupMenuActions;
 import 'package:fluffychat/pages/chat/send_file_dialog.dart';
@@ -99,14 +100,32 @@ class UnifiedChatController extends State<UnifiedChat> {
       if (room == null) continue;
       timelines[roomId] = await room.getTimeline(
         onUpdate: () {
-          if (mounted) setState(() {});
+          if (!mounted) return;
+          setState(() {});
+          _markRoomRead(roomId);
         },
       );
     }
 
     if (!mounted) return;
     setState(() => loading = false);
+    // Opening this conversation is itself "reading" every member room, the
+    // same way opening a normal room does - ChatController does this via
+    // its own updateView()/setReadMarker() calls, but nothing analogous
+    // existed here, so unread counts and read receipts on the underlying
+    // bridge rooms never advanced no matter how long the merged view
+    // stayed open.
+    for (final roomId in timelines.keys) {
+      _markRoomRead(roomId);
+    }
     await _loadPendingScheduledMessages();
+  }
+
+  void _markRoomRead(String roomId) {
+    final timeline = timelines[roomId];
+    if (timeline == null || timeline.events.isEmpty) return;
+    // ignore: unawaited_futures
+    timeline.setReadMarker(public: AppSettings.sendPublicReadReceipts.value);
   }
 
   List<ScheduledMessage> pendingScheduledMessages = [];
