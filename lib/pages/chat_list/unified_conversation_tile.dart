@@ -1,4 +1,5 @@
 import 'package:fluffychat/config/app_config.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contact_actions.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
 import 'package:fluffychat/utils/date_time_extension.dart';
@@ -117,6 +118,8 @@ class UnifiedConversationTile extends StatelessWidget {
                   ),
                 ),
           onTap: () => context.go('/rooms/unified/${group.id}'),
+          onLongPress: () =>
+              showUnifiedContactMenu(context, client: client, group: group),
         ),
       ),
     );

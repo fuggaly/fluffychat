@@ -4,6 +4,7 @@ import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/events/message.dart';
 import 'package:fluffychat/pages/chat/pending_scheduled_messages.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contact_actions.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_group_avatar.dart';
 import 'package:fluffychat/utils/date_time_extension.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +49,21 @@ class UnifiedChatView extends StatelessWidget {
             Flexible(child: Text(group.label, overflow: TextOverflow.ellipsis)),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Unified contact options',
+            icon: const Icon(Icons.more_vert_outlined),
+            onPressed: () => showUnifiedContactMenu(
+              context,
+              client: controller.client,
+              group: group,
+              // The group this route points at is gone once un-merged -
+              // leave the (now dead) conversation, same as leaving a
+              // normal room navigates away from it.
+              onUngrouped: () => context.go('/rooms'),
+            ),
+          ),
+        ],
       ),
       body: controller.loading
           ? const Center(child: CircularProgressIndicator.adaptive())

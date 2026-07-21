@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:fluffychat/l10n/l10n.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.dart';
 import 'package:fluffychat/widgets/future_loading_dialog.dart';
 import 'package:flutter/material.dart';
@@ -83,6 +84,10 @@ class ChatSettingsPopupMenuState extends State<ChatSettingsPopupMenu> {
                   future: () => widget.room.leave(),
                 );
                 if (result.error == null) {
+                  await UnifiedContactsService.removeRoomFromItsGroup(
+                    widget.room.client,
+                    widget.room.id,
+                  );
                   router.go('/rooms');
                 }
 

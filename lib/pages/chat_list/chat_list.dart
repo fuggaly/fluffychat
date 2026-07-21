@@ -755,6 +755,10 @@ class ChatListController extends State<ChatList>
         if (!mounted) return;
 
         await showFutureLoadingDialog(context: context, future: room.leave);
+        await UnifiedContactsService.removeRoomFromItsGroup(
+          room.client,
+          room.id,
+        );
 
         return;
       case ChatContextAction.addToSpace:

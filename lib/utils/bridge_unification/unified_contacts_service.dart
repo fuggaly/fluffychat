@@ -124,4 +124,25 @@ class UnifiedContactsService {
         .toList();
     await _saveGroups(client, updated);
   }
+
+  /// True only once every member room is muted - a merged conversation
+  /// muting/unmuting acts as one unit rather than leaving some networks
+  /// muted and others not, since it's presented as a single conversation.
+  static bool isMuted(Client client, UnifiedContactGroup group) {
+    return group.roomIds.every(
+      (roomId) =>
+          client.getRoomById(roomId)?.pushRuleState != PushRuleState.notify,
+    );
+  }
+
+  static Future<void> toggleMuted(Client client, UnifiedContactGroup group) {
+    final targetState = isMuted(client, group)
+        ? PushRuleState.notify
+        : PushRuleState.mentionsOnly;
+    return Future.wait([
+      for (final roomId in group.roomIds)
+        if (client.getRoomById(roomId) case final room?)
+          room.setPushRuleState(targetState),
+    ]);
+  }
 }

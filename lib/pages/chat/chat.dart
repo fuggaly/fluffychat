@@ -21,6 +21,7 @@ import 'package:fluffychat/pages/chat/trust_user_key_dialog.dart';
 import 'package:fluffychat/pages/chat/utils/web_file_to_x_file.dart';
 import 'package:fluffychat/pages/chat_details/chat_details.dart';
 import 'package:fluffychat/utils/adaptive_bottom_sheet.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_config.dart';
@@ -311,6 +312,8 @@ class ChatController extends State<ChatPageWithRoom>
     );
     if (!mounted) return;
     if (success.error != null) return;
+    await UnifiedContactsService.removeRoomFromItsGroup(room.client, room.id);
+    if (!mounted) return;
     context.go('/rooms');
   }
 
@@ -1487,6 +1490,7 @@ class ChatController extends State<ChatPageWithRoom>
     context.go('/rooms/${result.result!}');
 
     await showFutureLoadingDialog(context: context, future: room.leave);
+    await UnifiedContactsService.removeRoomFromItsGroup(room.client, room.id);
   }
 
   void onSelectMessage(Event event) {
