@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:matrix/matrix.dart';
 
 import 'bridge_label.dart';
@@ -83,8 +84,22 @@ String? _phoneKeyForRoom(Client client, Room room, String bridgeLabel) {
 }
 
 String? _otherPartyMxid(Client client, Room room) {
+  // room.summary.mHeroes is what getLocalizedDisplayname() itself uses to
+  // compute a DM's name - it's part of the room summary sent eagerly on
+  // every sync, unlike full member state, which is normally lazy-loaded
+  // and often just isn't present yet for a room that hasn't been opened.
+  // getParticipants()/directChatMatrixID depend on that lazy-loaded state
+  // being present, so for a room sitting unopened in the room list (the
+  // common case suggestions need to work for) they'd silently return
+  // nothing.
+  final hero = room.summary.mHeroes
+      ?.where((id) => id != client.userID)
+      .firstOrNull;
+  if (hero != null) return hero;
+
   final direct = room.directChatMatrixID;
   if (direct != null) return direct;
+
   for (final participant in room.getParticipants()) {
     if (participant.id != client.userID) return participant.id;
   }
