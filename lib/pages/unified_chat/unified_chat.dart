@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluffychat/config/setting_keys.dart';
+import 'package:fluffychat/config/themes.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat/chat.dart' show AddPopupMenuActions;
+import 'package:fluffychat/pages/chat/event_info_dialog.dart';
 import 'package:fluffychat/pages/chat/send_file_dialog.dart';
 import 'package:fluffychat/pages/chat/send_location_dialog.dart';
 import 'package:fluffychat/pages/chat/start_poll_bottom_sheet.dart';
@@ -17,6 +19,7 @@ import 'package:fluffychat/utils/delay_send/schedule_send_dialog.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_api_client.dart';
 import 'package:fluffychat/utils/delay_send/scheduler_config.dart';
 import 'package:fluffychat/utils/file_selector.dart';
+import 'package:fluffychat/utils/matrix_sdk_extensions/matrix_locals.dart';
 import 'package:fluffychat/widgets/adaptive_dialogs/show_ok_cancel_alert_dialog.dart';
 import 'package:fluffychat/widgets/adaptive_dialogs/show_text_input_dialog.dart';
 import 'package:fluffychat/widgets/matrix.dart';
@@ -24,6 +27,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:matrix/matrix.dart';
+import 'package:scroll_to_index/scroll_to_index.dart';
 
 /// A merged view of a unified-contact group's member rooms, presented as
 /// one conversation. Composes one [Timeline] per member room (rather than
@@ -40,7 +44,10 @@ class UnifiedChat extends StatefulWidget {
 class UnifiedChatController extends State<UnifiedChat> {
   final Map<String, Timeline> timelines = {};
   final TextEditingController sendController = TextEditingController();
-  final ScrollController scrollController = ScrollController();
+  // AutoScrollController (not plain ScrollController) so scrollToEventId
+  // below can jump straight to a specific message, same mechanism a
+  // normal room's chat_event_list.dart uses via AutoScrollTag.
+  final AutoScrollController scrollController = AutoScrollController();
   late final FocusNode inputFocus;
   bool loading = true;
   String? selectedRoomId;
@@ -293,12 +300,148 @@ class UnifiedChatController extends State<UnifiedChat> {
       await SchedulerApiClient().cancel(msg.id);
     } on SchedulerApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not cancel: ${e.message}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not cancel: ${e.message}')));
       return;
     }
     await _loadPendingScheduledMessages();
+  }
+
+  // --- Selection, reply, edit, mention, info, scroll-to-event ---
+  //
+  // Mirrors ChatController's own versions. Deliberately not implemented
+  // here: forwarding a selected message to another room, "try again" for
+  // a failed send, and Matrix threads - none of the bridges this app
+  // talks to originate threaded messages (mautrix bridges don't create
+  // m.thread relations from a WhatsApp/SMS/Slack reply), so a whole
+  // secondary thread-pane view would have no real messages to ever show.
+
+  final Set<Event> selectedEvents = {};
+
+  bool get selectMode => selectedEvents.isNotEmpty;
+
+  Event? replyEvent;
+  Event? editEvent;
+  String pendingText = '';
+  String? scrollToEventIdMarker;
+
+  void onSelectMessage(Event event) {
+    if (event.redacted) return;
+    setState(() {
+      if (selectedEvents.contains(event)) {
+        selectedEvents.remove(event);
+      } else {
+        selectedEvents.add(event);
+      }
+    });
+  }
+
+  void clearSelectedEvents() => setState(() {
+    selectedEvents.clear();
+    showEmojiPicker = false;
+  });
+
+  void clearSingleSelectedEvent() {
+    if (selectedEvents.length <= 1) clearSelectedEvents();
+  }
+
+  void showEventInfo(Event event) => event.showInfoDialog(context);
+
+  void replyAction({Event? replyTo}) {
+    setState(() {
+      replyEvent = replyTo ?? selectedEvents.first;
+      // A reply's inReplyTo relation only makes sense sent through the
+      // same room the original message is in - force the network
+      // dropdown to match rather than risk sending it through whichever
+      // other network happened to be selected.
+      selectedRoomId = replyEvent!.room.id;
+      selectedEvents.clear();
+    });
+    inputFocus.requestFocus();
+  }
+
+  void cancelReplyEventAction() => setState(() {
+    if (editEvent != null) {
+      sendController.text = pendingText;
+      pendingText = '';
+    }
+    replyEvent = null;
+    editEvent = null;
+  });
+
+  bool get canEditSelectedEvents {
+    if (selectedEvents.length != 1 || !selectedEvents.first.status.isSent) {
+      return false;
+    }
+    return selectedEvents.first.senderId == client.userID;
+  }
+
+  bool get canReplySelectedEvent =>
+      selectedEvents.length == 1 && selectedEvents.first.status.isSent;
+
+  void editSelectedEventAction() =>
+      _startEditingEvent(selectedEvents.first, clearSelection: true);
+
+  void _startEditingEvent(Event event, {bool clearSelection = false}) {
+    final timeline = timelineForEvent(event);
+    if (timeline == null) return;
+    setState(() {
+      pendingText = sendController.text;
+      editEvent = event;
+      // Same reasoning as replyAction - an edit must go out through the
+      // room the original message actually lives in.
+      selectedRoomId = event.room.id;
+      sendController.text = event
+          .getDisplayEvent(timeline)
+          .calcLocalizedBodyFallback(
+            MatrixLocals(L10n.of(context)),
+            withSenderNamePrefix: false,
+            hideReply: true,
+          );
+      if (clearSelection) selectedEvents.clear();
+    });
+    inputFocus.requestFocus();
+  }
+
+  void onMention(Event event) {
+    sendController.text += '${event.senderFromMemoryOrFallback.mention} ';
+  }
+
+  /// Same idea as ChatController's own version, but there's no single
+  /// timeline to fall back to loading more context from - a reply
+  /// pointing at a message that isn't currently loaded in its own room's
+  /// Timeline just can't be jumped to here (a normal room can fetch
+  /// context around an arbitrary event id; this view only ever holds
+  /// whatever's already paged into each member room's Timeline).
+  Future<void> scrollToEventId(
+    String eventId, {
+    bool highlightEvent = true,
+  }) async {
+    final events = mergedEvents;
+    final index = events.indexWhere((e) => e.eventId == eventId);
+    if (index == -1) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'That message is further back than what\'s currently loaded - scroll up to load more history first.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (highlightEvent) setState(() => scrollToEventIdMarker = eventId);
+    // No +1 offset here unlike ChatController's own version - that one
+    // accounts for chat_event_list.dart's footer sitting at item index 0;
+    // this view's "load more" footer sits at the far end of the index
+    // range instead (index == events.length), so a merged event's index
+    // maps directly onto its ListView item index.
+    await scrollController.scrollToIndex(
+      index,
+      duration: FluffyThemes.animationDuration,
+      preferPosition: AutoScrollPosition.middle,
+    );
   }
 
   /// All message events from every member room's timeline, newest first.
@@ -353,11 +496,17 @@ class UnifiedChatController extends State<UnifiedChat> {
     if (room == null) return;
 
     final body = sendController.text;
-    sendController.clear();
-    setState(() {});
+    final reply = replyEvent;
+    final edit = editEvent;
 
     // ignore: unawaited_futures
-    room.sendTextEvent(body);
+    room.sendTextEvent(body, inReplyTo: reply, editEventId: edit?.eventId);
+    setState(() {
+      sendController.text = pendingText;
+      pendingText = '';
+      replyEvent = null;
+      editEvent = null;
+    });
     await UnifiedContactsService.setLastUsedRoom(
       client,
       currentGroup.id,

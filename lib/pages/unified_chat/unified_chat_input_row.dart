@@ -29,6 +29,45 @@ class UnifiedChatInputRow extends StatelessWidget {
 
     final textMessageOnly = controller.sendController.text.isNotEmpty;
 
+    if (controller.selectMode) {
+      // Simplified stand-in for both ChatInputRow's own selectMode row and
+      // ChatAppBarTitle's selectMode actions in a normal room - only Edit,
+      // Reply and Close, since forwarding to another room, "try again" for
+      // a failed send, copy, redact and reply-in-thread weren't part of
+      // what a merged conversation was missing.
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          IconButton(
+            tooltip: L10n.of(context).close,
+            icon: const Icon(Icons.close),
+            onPressed: controller.clearSelectedEvents,
+          ),
+          Expanded(
+            child: Text(
+              '${controller.selectedEvents.length} selected',
+              style: theme.textTheme.bodyLarge,
+            ),
+          ),
+          if (controller.canReplySelectedEvent)
+            IconButton(
+              tooltip: L10n.of(context).reply,
+              icon: const Icon(Icons.reply_outlined),
+              onPressed: () => controller.replyAction(
+                replyTo: controller.selectedEvents.first,
+              ),
+            ),
+          if (controller.canEditSelectedEvents)
+            IconButton(
+              tooltip: L10n.of(context).edit,
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: controller.editSelectedEventAction,
+            ),
+          const SizedBox(width: 8),
+        ],
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

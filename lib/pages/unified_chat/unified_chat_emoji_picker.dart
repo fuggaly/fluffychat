@@ -84,14 +84,11 @@ class UnifiedChatEmojiPicker extends StatelessWidget {
                               room,
                             );
                             if (!proceed) return;
-                            room.sendEvent(
-                              {
-                                'body': sticker.body,
-                                'info': sticker.info ?? {},
-                                'url': sticker.url.toString(),
-                              },
-                              type: EventTypes.Sticker,
-                            );
+                            room.sendEvent({
+                              'body': sticker.body,
+                              'info': sticker.info ?? {},
+                              'url': sticker.url.toString(),
+                            }, type: EventTypes.Sticker);
                             controller.hideEmojiPicker();
                           },
                         ),
