@@ -115,7 +115,7 @@ class BackgroundPush {
       //<GOOGLE_SERVICES>    ),
       //<GOOGLE_SERVICES>    clients: clients,
       //<GOOGLE_SERVICES>    l10n: l10n,
-      //<GOOGLE_SERVICES>    activeRoomId: matrix?.activeRoomId,
+      //<GOOGLE_SERVICES>    activeRoomIds: matrix?.activeRoomIds,
       //<GOOGLE_SERVICES>    flutterLocalNotificationsPlugin: _flutterLocalNotificationsPlugin,
       //<GOOGLE_SERVICES>  ),
       //<GOOGLE_SERVICES>);
@@ -436,7 +436,7 @@ class BackgroundPush {
       PushNotification.fromJson(data),
       clients: clients,
       l10n: l10n,
-      activeRoomId: matrix?.activeRoomId,
+      activeRoomIds: matrix?.activeRoomIds,
       flutterLocalNotificationsPlugin: _flutterLocalNotificationsPlugin,
       useNotificationActions:
           false, // Buggy with UP: https://codeberg.org/UnifiedPush/flutter-connector/issues/34

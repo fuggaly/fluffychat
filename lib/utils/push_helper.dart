@@ -33,7 +33,7 @@ Future<void> pushHelper(
   PushNotification notification, {
   List<Client>? clients,
   L10n? l10n,
-  String? activeRoomId,
+  Set<String>? activeRoomIds,
   required FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin,
   bool useNotificationActions = true,
 }) async {
@@ -42,7 +42,7 @@ Future<void> pushHelper(
       notification,
       clients: clients,
       l10n: l10n,
-      activeRoomId: activeRoomId,
+      activeRoomIds: activeRoomIds,
       flutterLocalNotificationsPlugin: flutterLocalNotificationsPlugin,
       useNotificationActions: useNotificationActions,
     );
@@ -85,7 +85,7 @@ Future<void> _tryPushHelper(
   PushNotification notification, {
   List<Client>? clients,
   L10n? l10n,
-  String? activeRoomId,
+  Set<String>? activeRoomIds,
   required FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin,
   bool useNotificationActions = true,
 }) async {
@@ -96,7 +96,7 @@ Future<void> _tryPushHelper(
   );
 
   if (notification.roomId != null &&
-      activeRoomId == notification.roomId &&
+      activeRoomIds?.contains(notification.roomId) == true &&
       WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
     Logs().v('Room is in foreground. Stop push helper here.');
     return;

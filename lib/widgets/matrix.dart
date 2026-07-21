@@ -8,6 +8,7 @@ import 'dart:convert';
 
 import 'package:collection/collection.dart';
 import 'package:fluffychat/l10n/l10n.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/client_manager.dart';
 import 'package:fluffychat/utils/init_with_restore.dart';
 import 'package:fluffychat/utils/matrix_sdk_extensions/matrix_file_extension.dart';
@@ -199,6 +200,24 @@ class MatrixState extends State<Matrix> {
     final route = FluffyChatApp.router.routeInformationProvider.value.uri.path;
     if (!route.startsWith('/rooms/')) return null;
     return route.split('/')[2];
+  }
+
+  /// Every room id that should count as "currently open" for notification
+  /// suppression purposes. For a normal room this is just that one room; a
+  /// unified/merged conversation route (`/rooms/unified/<groupId>`) isn't
+  /// backed by a single room id at all, so [activeRoomId] alone would never
+  /// match any of its member rooms and messages arriving there while it's
+  /// open would still notify - this expands to every member room instead.
+  Set<String>? get activeRoomIds {
+    final roomId = activeRoomId;
+    if (roomId == null) return null;
+    if (roomId != 'unified') return {roomId};
+    final route = FluffyChatApp.router.routeInformationProvider.value.uri.path;
+    final segments = route.split('/');
+    if (segments.length <= 3) return null;
+    final group = UnifiedContactsService.groupById(client, segments[3]);
+    if (group == null) return null;
+    return group.roomIds.toSet();
   }
 
   @override

@@ -5,6 +5,7 @@
 
 import 'package:fluffychat/config/setting_keys.dart';
 import 'package:fluffychat/l10n/l10n.dart';
+import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/client_download_content_extension.dart';
 import 'package:fluffychat/utils/matrix_sdk_extensions/matrix_locals.dart';
 import 'package:fluffychat/utils/notification_background_handler.dart';
@@ -24,15 +25,23 @@ extension LocalNotificationsExtension on MatrixState {
   Future<void> showLocalNotification(Event event) async {
     final l10n = L10n.of(context);
     final roomId = event.room.id;
-    if (activeRoomId == roomId) {
+    if (activeRoomIds?.contains(roomId) == true) {
       if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         return;
       }
     }
 
-    final title = event.room.getLocalizedDisplayname(
-      MatrixLocals(L10n.of(context)),
-    );
+    // See push_helper.dart's own version of this for the full rationale:
+    // a merged conversation is several independent Matrix rooms as far as
+    // notifications are concerned, so without this a unified contact could
+    // notify separately under each underlying room's own "Contact via
+    // WhatsApp"/"Contact via SMS" name instead of once under their plain
+    // name.
+    final unifiedGroup = UnifiedContactsService.groupForRoom(client, roomId);
+
+    final title =
+        unifiedGroup?.label ??
+        event.room.getLocalizedDisplayname(MatrixLocals(L10n.of(context)));
     final body = await event.calcLocalizedBody(
       MatrixLocals(L10n.of(context)),
       withSenderNamePrefix:
@@ -43,7 +52,12 @@ extension LocalNotificationsExtension on MatrixState {
       hideEdit: true,
       removeMarkdown: true,
     );
-    final avatarUrl = event.room.avatar;
+    final avatarUrl =
+        event.room.avatar ??
+        unifiedGroup?.roomIds
+            .map((id) => client.getRoomById(id)?.avatar)
+            .whereType<Uri>()
+            .firstOrNull;
 
     const size = 128;
     const thumbnailMethod = ThumbnailMethod.crop;
@@ -78,13 +92,13 @@ extension LocalNotificationsExtension on MatrixState {
         title,
         body: body,
         icon: thumbnailUri?.toString(),
-        tag: event.room.id,
+        tag: unifiedGroup?.id ?? event.room.id,
       );
       return;
     }
 
     FlutterLocalNotificationsPlugin().show(
-      id: event.room.id.hashCode,
+      id: (unifiedGroup?.id ?? event.room.id).hashCode,
       title: title,
       body: body,
       notificationDetails: NotificationDetails(
