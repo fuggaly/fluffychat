@@ -39,6 +39,26 @@ class BridgeContact {
   );
 }
 
+/// A server-verified pairing of rooms likely belonging to the same real
+/// contact across two or more bridged networks - computed once by
+/// matrix-bridge-relay (see its suggestedGroupings.mjs) from
+/// contacts-sync's cross-bridge ghost mapping plus @bridgehub's own room
+/// membership, cached, and read here as-is. [rooms] are Matrix room ids
+/// (mxids) - the caller still needs to check which of them this device
+/// actually has joined locally before treating it as actionable.
+class SuggestedGrouping {
+  final String label;
+  final List<String> rooms;
+
+  SuggestedGrouping({required this.label, required this.rooms});
+
+  factory SuggestedGrouping.fromJson(Map<String, Object?> json) =>
+      SuggestedGrouping(
+        label: json['label'] as String,
+        rooms: (json['rooms'] as List).cast<String>(),
+      );
+}
+
 class BridgeProvisioningException implements Exception {
   final String bridgeLabel;
   final String message;
@@ -97,6 +117,26 @@ class BridgeProvisioningClient {
     final list = (jsonDecode(res.body) as Map)['contacts'] as List;
     return list
         .map((c) => AddressBookContact.fromJson((c as Map).cast()))
+        .toList();
+  }
+
+  /// The relay's already-computed, cached list of likely cross-bridge
+  /// contact pairings ("calculate once, read many" - every device just
+  /// reads this, no per-client matching). See [SuggestedGrouping].
+  Future<List<SuggestedGrouping>> suggestedGroupings() async {
+    final res = await http.get(
+      await _uri('/suggested_groupings'),
+      headers: await _authHeaders(),
+    );
+    if (res.statusCode != 200) {
+      throw BridgeProvisioningException(
+        'suggested groupings',
+        _errorMessage(res),
+      );
+    }
+    final list = (jsonDecode(res.body) as Map)['suggestions'] as List;
+    return list
+        .map((s) => SuggestedGrouping.fromJson((s as Map).cast()))
         .toList();
   }
 

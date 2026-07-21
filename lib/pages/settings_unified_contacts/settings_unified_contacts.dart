@@ -1,5 +1,5 @@
 import 'package:fluffychat/pages/settings_unified_contacts/room_picker_dialog.dart';
-import 'package:fluffychat/utils/bridge_unification/bridge_group_suggestions.dart';
+import 'package:fluffychat/utils/bridge_search/bridge_provisioning_client.dart';
 import 'package:fluffychat/utils/bridge_unification/bridge_label.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contact_group.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
@@ -21,15 +21,36 @@ class SettingsUnifiedContacts extends StatefulWidget {
 }
 
 class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
-  // Suggestions are recomputed fresh every build (nothing persisted), so a
-  // dismissed one is only remembered for this screen visit - re-opening
-  // this page later will offer it again. Acceptable: the phone-matching
-  // heuristic is narrow enough that repeat false positives should be rare,
-  // and dismissing is a single tap either way.
+  // Suggestions are computed once server-side by matrix-bridge-relay and
+  // just read here - this device only does a cheap local filter (which of
+  // the listed rooms does it actually have joined, and which aren't
+  // already grouped), never its own matching. Dismissing one is only
+  // remembered for this screen visit, not persisted - re-opening this page
+  // later will offer it again.
   final Set<String> _dismissedSuggestionKeys = {};
+  List<SuggestedGrouping> _rawSuggestions = [];
 
-  String _suggestionKey(SuggestedGroup suggestion) =>
-      (suggestion.roomIds.toList()..sort()).join(',');
+  @override
+  void initState() {
+    super.initState();
+    _loadSuggestions();
+  }
+
+  Future<void> _loadSuggestions() async {
+    try {
+      final suggestions = await BridgeProvisioningClient().suggestedGroupings();
+      if (!mounted) return;
+      setState(() => _rawSuggestions = suggestions);
+    } on BridgeProvisioningException {
+      // bridge_relay not configured on this device, or unreachable - the
+      // Suggested section just doesn't appear, same soft-fail convention
+      // used elsewhere for optional external services (e.g. Delay Send's
+      // "not set up yet" handling). Not an error state worth surfacing.
+    }
+  }
+
+  String _suggestionKey(SuggestedGrouping suggestion) =>
+      (suggestion.rooms.toList()..sort()).join(',');
 
   String _roomDisplayName(Client client, String roomId) {
     final room = client.getRoomById(roomId);
@@ -77,10 +98,10 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
     setState(() {});
   }
 
-  Future<void> _mergeSuggestion(SuggestedGroup suggestion) async {
+  Future<void> _mergeSuggestion(SuggestedGrouping suggestion) async {
     final client = Matrix.of(context).client;
     final roomLabels = <String, String>{};
-    for (final roomId in suggestion.roomIds) {
+    for (final roomId in suggestion.rooms) {
       final room = client.getRoomById(roomId);
       if (room == null) continue;
       roomLabels[roomId] =
@@ -89,8 +110,8 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
     }
     await UnifiedContactsService.createGroup(
       client,
-      label: suggestion.suggestedLabel,
-      roomIds: suggestion.roomIds,
+      label: suggestion.label,
+      roomIds: suggestion.rooms,
       roomLabels: roomLabels,
     );
     if (!mounted) return;
@@ -119,7 +140,26 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
   Widget build(BuildContext context) {
     final client = Matrix.of(context).client;
     final groups = UnifiedContactsService.getGroups(client);
-    final suggestions = findSuggestedGroupings(client)
+
+    // The relay's suggestions are computed without any visibility into this
+    // account's own groupings (server-side, shared across every device) -
+    // the only matching left to do here is a cheap local filter: keep only
+    // rooms this device actually has joined and that aren't already in a
+    // group, and drop the suggestion entirely once fewer than 2 remain.
+    final suggestions = _rawSuggestions
+        .map(
+          (s) => SuggestedGrouping(
+            label: s.label,
+            rooms: s.rooms
+                .where(
+                  (id) =>
+                      client.getRoomById(id) != null &&
+                      UnifiedContactsService.groupForRoom(client, id) == null,
+                )
+                .toList(),
+          ),
+        )
+        .where((s) => s.rooms.length >= 2)
         .where((s) => !_dismissedSuggestionKeys.contains(_suggestionKey(s)))
         .toList();
 
@@ -147,16 +187,16 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8, left: 4),
                     child: Text(
-                      'Suggested - same phone number seen on two networks',
+                      'Suggested - verified same contact on two networks',
                       style: Theme.of(context).textTheme.labelLarge,
                     ),
                   ),
                   ...suggestions.map(
                     (suggestion) => Card(
                       child: ListTile(
-                        title: Text(suggestion.suggestedLabel),
+                        title: Text(suggestion.label),
                         subtitle: Text(
-                          suggestion.roomIds
+                          suggestion.rooms
                               .map(
                                 (id) => effectiveRoomLabel(
                                   client.getRoomById(id),
