@@ -191,7 +191,23 @@ abstract class AppRoutes {
                   pageBuilder: (context, state) => defaultPageBuilder(
                     context,
                     state,
-                    UnifiedChat(groupId: state.pathParameters['groupid']!),
+                    // go_router's own pageKey is derived from the route's
+                    // path pattern, not the resolved groupid - without an
+                    // explicit per-group key here, switching between two
+                    // unified conversations reuses the same State (same
+                    // bug class ChatPage avoids via its own
+                    // Key('chat_page_${roomId}_$eventId')), leaving
+                    // timelines/selectedRoomId stuck on the previous group
+                    // while the app bar (rebuilt fresh from widget.groupId
+                    // every build) updates correctly - the exact symptom
+                    // reported: title/avatar/network icon change, messages
+                    // don't.
+                    UnifiedChat(
+                      key: ValueKey(
+                        'unified_chat_${state.pathParameters['groupid']}',
+                      ),
+                      groupId: state.pathParameters['groupid']!,
+                    ),
                   ),
                   redirect: loggedOutRedirect,
                 ),
