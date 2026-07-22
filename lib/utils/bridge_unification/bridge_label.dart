@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:matrix/matrix.dart';
@@ -9,7 +10,12 @@ import 'package:matrix/matrix.dart';
 /// Returns null for un-bridged rooms (e.g. a plain Matrix DM) - callers
 /// should fall back to manual labelling in that case.
 String? bridgeLabelForRoom(Room room) {
-  final bridgeState = room.getState('m.bridge');
+  // Not room.getState('m.bridge') - that defaults to state_key '', but
+  // mautrix bridges set this event with a non-empty, bridge-specific
+  // state_key (e.g. "matrix.fuggaly.com/whatsapp"), so the default lookup
+  // always misses it. A portal room only ever has one bridge, so take
+  // whichever state_key is present.
+  final bridgeState = room.states['m.bridge']?.values.firstOrNull;
   if (bridgeState == null) return null;
 
   final protocol = bridgeState.content['protocol'] as Map?;
