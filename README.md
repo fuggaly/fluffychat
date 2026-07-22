@@ -45,6 +45,25 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 ... and much more.
 
+## Custom fork features
+
+This is a personal fork with three additions on top of upstream
+FluffyChat, built for a single self-hosted homeserver:
+
+- ⏰ **Delay Send** - schedule a message to send later, from either a
+  normal or a merged conversation; a ghost bubble shows above the
+  composer until it fires.
+- 🔀 **Bridge Unification** - merge a contact's separate bridged rooms
+  (e.g. WhatsApp + SMS) into one conversation, with typing indicators,
+  mute/un-merge, and full message interactions (react/reply/edit/mention)
+  that resolve back to the correct underlying network. Includes
+  server-computed suggestions for rooms likely belonging to the same
+  contact.
+- 🔍 **Cross-Bridge Contact Search** - search the real address book, not
+  each bridge's own limited contact list, when starting a new chat.
+
+Each relies on a small companion service (not part of this repo) deployed
+alongside the homeserver - see `CLAUDE.md` for the architecture.
 
 # Installation
 
