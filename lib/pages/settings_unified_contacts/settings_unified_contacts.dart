@@ -58,12 +58,22 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
     return stripViaSuffix(room.getLocalizedDisplayname());
   }
 
-  Future<void> _createGroup() async {
+  /// [preselectedRoomIds]/[initialLabel] seed the picker from an
+  /// auto-suggestion (see [_mergeSuggestion]) - the suggestion is only ever
+  /// a starting point, since it's derived from address-book phone-number
+  /// matching and can't detect a bridge with no phone number to match on
+  /// (e.g. Slack). Reviewing/extending it through the same manual picker
+  /// used for "Merge rooms" is the point where a missed bridge gets added.
+  Future<void> _createGroup({
+    Set<String> preselectedRoomIds = const {},
+    String? initialLabel,
+  }) async {
     final client = Matrix.of(context).client;
 
     final selectedRoomIds = await showScaffoldDialog<Set<String>>(
       context: context,
-      builder: (context) => const RoomPickerDialog(),
+      builder: (context) =>
+          RoomPickerDialog(initiallySelectedRoomIds: preselectedRoomIds),
     );
     if (selectedRoomIds == null || selectedRoomIds.length < 2) return;
     if (!mounted) return;
@@ -73,9 +83,11 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
       context: context,
       title: 'Name this unified contact',
       hintText: 'e.g. a person\'s name',
-      initialText: firstRoom == null
-          ? null
-          : stripViaSuffix(firstRoom.getLocalizedDisplayname()),
+      initialText:
+          initialLabel ??
+          (firstRoom == null
+              ? null
+              : stripViaSuffix(firstRoom.getLocalizedDisplayname())),
     );
     if (label == null || label.trim().isEmpty) return;
 
@@ -98,25 +110,10 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
     setState(() {});
   }
 
-  Future<void> _mergeSuggestion(SuggestedGrouping suggestion) async {
-    final client = Matrix.of(context).client;
-    final roomLabels = <String, String>{};
-    for (final roomId in suggestion.rooms) {
-      final room = client.getRoomById(roomId);
-      if (room == null) continue;
-      roomLabels[roomId] =
-          bridgeLabelForRoom(room) ??
-          stripViaSuffix(room.getLocalizedDisplayname());
-    }
-    await UnifiedContactsService.createGroup(
-      client,
-      label: suggestion.label,
-      roomIds: suggestion.rooms,
-      roomLabels: roomLabels,
-    );
-    if (!mounted) return;
-    setState(() {});
-  }
+  Future<void> _mergeSuggestion(SuggestedGrouping suggestion) => _createGroup(
+    preselectedRoomIds: suggestion.rooms.toSet(),
+    initialLabel: suggestion.label,
+  );
 
   Future<void> _deleteGroup(UnifiedContactGroup group) async {
     final confirmed = await showOkCancelAlertDialog(
@@ -198,10 +195,10 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
                         subtitle: Text(
                           suggestion.rooms
                               .map(
-                                (id) => effectiveRoomLabel(
-                                  client.getRoomById(id),
-                                  null,
-                                ),
+                                (id) =>
+                                    client.getRoomById(id)
+                                        ?.getLocalizedDisplayname() ??
+                                    id,
                               )
                               .join(' + '),
                         ),

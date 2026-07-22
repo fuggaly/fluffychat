@@ -12,7 +12,13 @@ import 'package:matrix/matrix.dart';
 /// rooms already in another group (one group per room, to avoid ambiguous
 /// send-routing).
 class RoomPickerDialog extends StatefulWidget {
-  const RoomPickerDialog({super.key});
+  /// Pre-checked room ids, e.g. from an auto-suggestion - lets the user
+  /// review/extend a suggestion (add a bridge it failed to detect, such as
+  /// a Slack account with no phone number to match on) rather than only
+  /// being able to accept or reject it as-is.
+  final Set<String> initiallySelectedRoomIds;
+
+  const RoomPickerDialog({super.key, this.initiallySelectedRoomIds = const {}});
 
   @override
   State<RoomPickerDialog> createState() => _RoomPickerDialogState();
@@ -20,7 +26,7 @@ class RoomPickerDialog extends StatefulWidget {
 
 class _RoomPickerDialogState extends State<RoomPickerDialog> {
   final TextEditingController _filterController = TextEditingController();
-  final Set<String> _selectedRoomIds = {};
+  late final Set<String> _selectedRoomIds = {...widget.initiallySelectedRoomIds};
 
   @override
   void dispose() {
