@@ -143,14 +143,18 @@ class _SettingsUnifiedContactsState extends State<SettingsUnifiedContacts> {
     // the only matching left to do here is a cheap local filter: keep only
     // rooms this device actually has joined and that aren't already in a
     // group, and drop the suggestion entirely once fewer than 2 remain.
+    // Anything shown here is "name"-matched in practice - a "uid"-matched
+    // suggestion is auto-merged silently by AutoMergeService and so never
+    // has 2+ ungrouped rooms left by the time this page reads it.
     final suggestions = _rawSuggestions
         .map(
           (s) => SuggestedGrouping(
             label: s.label,
+            matchedBy: s.matchedBy,
             rooms: s.rooms
                 .where(
                   (id) =>
-                      client.getRoomById(id) != null &&
+                      client.getRoomById(id)?.membership == Membership.join &&
                       UnifiedContactsService.groupForRoom(client, id) == null,
                 )
                 .toList(),
