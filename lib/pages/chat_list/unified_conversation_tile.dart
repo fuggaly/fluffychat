@@ -74,7 +74,6 @@ class UnifiedConversationTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   softWrap: false,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
               if (latestReceivedTime != null)

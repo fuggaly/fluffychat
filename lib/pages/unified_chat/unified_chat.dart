@@ -189,13 +189,55 @@ class UnifiedChatController extends State<UnifiedChat> {
     for (final roomId in currentGroup.roomIds) {
       final room = client.getRoomById(roomId);
       if (room == null) continue;
-      timelines[roomId] = await room.getTimeline(
-        onUpdate: () {
-          if (!mounted) return;
-          setState(() {});
-          _markRoomRead(roomId);
-        },
-      );
+      try {
+        // A member room can revert to Membership.invite behind this
+        // group's back - e.g. autobot's Room Evaluation evicting then
+        // later re-inviting the human once a contact's availability
+        // window reopens (see autobot.mjs) - and since member rooms are
+        // deliberately hidden from the main room list in favour of this
+        // merged view, there's no other UI path where the user would ever
+        // see or accept that pending re-invite. An invited-but-not-joined
+        // room has no accessible timeline at all (confirmed live - even
+        // an explicit requestHistory() below comes back with zero
+        // events), so silently accept it here, the same way a normal
+        // room auto-joins on tap (see ChatListController.onChatTap) -
+        // the user already consented to this room being part of the
+        // conversation by keeping it in the group.
+        if (room.membership == Membership.invite) {
+          final waitForRoom = client.waitForRoomInSync(roomId, join: true);
+          await room.join();
+          await waitForRoom;
+        }
+        final timeline = await room.getTimeline(
+          onUpdate: () {
+            if (!mounted) return;
+            setState(() {});
+            _markRoomRead(roomId);
+          },
+        );
+        // A member room is never opened directly (hidden from the room
+        // list in favour of this merged view), so nothing else ever
+        // triggers the usual scroll-driven history request a normal
+        // ChatController relies on. If nothing's cached locally yet
+        // (getTimeline() can legitimately come back empty), fetch some
+        // history explicitly - otherwise _markRoomRead's own
+        // events.isEmpty guard silently no-ops forever, since no live
+        // event may ever arrive to retry it via onUpdate, leaving this
+        // room's unread count stuck no matter how long the merged view
+        // stays open.
+        if (timeline.events.isEmpty) {
+          await timeline.requestHistory();
+        }
+        timelines[roomId] = timeline;
+      } catch (e, s) {
+        // One member room failing to load its timeline (network hiccup,
+        // a bridge-puppeted room rejecting something) shouldn't abort the
+        // rest - each room here is independent, unlike a normal chat's
+        // single timeline. Without this, every room after the failing one
+        // in the group never gets a Timeline (or a read-marker call)
+        // for the rest of this screen's life.
+        Logs().w('UnifiedChat: failed to load timeline for $roomId', e, s);
+      }
     }
 
     if (!mounted) return;
@@ -216,7 +258,11 @@ class UnifiedChatController extends State<UnifiedChat> {
     final timeline = timelines[roomId];
     if (timeline == null || timeline.events.isEmpty) return;
     // ignore: unawaited_futures
-    timeline.setReadMarker(public: AppSettings.sendPublicReadReceipts.value);
+    timeline
+        .setReadMarker(public: AppSettings.sendPublicReadReceipts.value)
+        .catchError(
+          (e, s) => Logs().w('UnifiedChat: failed to mark $roomId read', e, s),
+        );
   }
 
   List<ScheduledMessage> pendingScheduledMessages = [];
