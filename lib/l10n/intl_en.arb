@@ -1959,6 +1959,7 @@
     "noOneCanJoin": "No one can join",
     "knock": "Knock",
     "users": "Users",
+    "bridgeContacts": "Bridge Contacts",
     "storeInAndroidKeystore": "Store in Android KeyStore",
     "storeInAppleKeyChain": "Store in Apple KeyChain",
     "storeSecurlyOnThisDevice": "Store securely on this device",

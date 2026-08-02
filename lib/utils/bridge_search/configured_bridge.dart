@@ -31,6 +31,25 @@ extension BridgeKindCapabilities on BridgeKind {
     BridgeKind.generic => false,
   };
 
+  /// Whether resolve_identifier(create_chat=false) is a genuine
+  /// reachability check for this bridge, confirmed live against each
+  /// bridge's own provisioning API: WhatsApp actually queries
+  /// IsOnWhatsApp and 404s for a number with no WhatsApp account.
+  /// Google Messages returns 200 for ANY syntactically valid phone
+  /// number, including a landline that can't actually receive SMS -
+  /// despite matrix-bridge-relay's own docs originally assuming "SMS is
+  /// inherently reachable for any valid number" (that assumption doesn't
+  /// hold; a landline is syntactically valid but not SMS-reachable).
+  /// BridgeContactSearch uses this to fall back to a mobile-number
+  /// heuristic gate for bridges where the check can't be trusted, rather
+  /// than surfacing every address-book number as if it worked.
+  bool get hasRealReachabilityCheck => switch (this) {
+    BridgeKind.whatsapp => true,
+    BridgeKind.googleMessages => false,
+    BridgeKind.slack => false,
+    BridgeKind.generic => false,
+  };
+
   String get displayName => switch (this) {
     BridgeKind.whatsapp => 'WhatsApp',
     BridgeKind.googleMessages => 'Google Messages',

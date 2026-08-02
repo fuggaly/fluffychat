@@ -10,6 +10,9 @@ import 'package:cross_file/cross_file.dart';
 import 'package:fluffychat/config/app_config.dart';
 import 'package:fluffychat/l10n/l10n.dart';
 import 'package:fluffychat/pages/chat_list/chat_list_view.dart';
+import 'package:fluffychat/utils/bridge_search/bridge_contact_search.dart';
+import 'package:fluffychat/utils/bridge_search/bridge_relay_config.dart';
+import 'package:fluffychat/utils/bridge_unification/auto_merge_service.dart';
 import 'package:fluffychat/utils/bridge_unification/known_bridge_bots.dart';
 import 'package:fluffychat/utils/bridge_unification/unified_contacts_service.dart';
 import 'package:fluffychat/utils/error_reporter.dart';
@@ -142,6 +145,18 @@ class ChatListController extends State<ChatList>
     context.go('/rooms/${room.id}');
   }
 
+  Future<void> startBridgeChat(BridgeSearchResult result) async {
+    final client = Matrix.of(context).client;
+
+    final roomId = await showFutureLoadingDialog(
+      context: context,
+      future: () => _bridgeContactSearch.startChat(client, result),
+    );
+    if (roomId.error != null || !mounted) return;
+    cancelSearch();
+    context.go('/rooms/${roomId.result}');
+  }
+
   bool Function(Room) getRoomFilterByActiveFilter(ActiveFilter activeFilter) {
     switch (activeFilter) {
       case ActiveFilter.allChats:
@@ -180,6 +195,9 @@ class ChatListController extends State<ChatList>
   Timer? _coolDown;
   SearchUserDirectoryResponse? userSearchResult;
   QueryPublicRoomsResponse? roomSearchResult;
+  final BridgeContactSearch _bridgeContactSearch = BridgeContactSearch();
+  List<BridgeSearchResult>? bridgeSearchResult;
+  Map<String, String> bridgeSearchErrors = {};
 
   bool isSearching = false;
   static const String _serverStoreNamespace = 'im.fluffychat.search.server';
@@ -224,6 +242,8 @@ class ChatListController extends State<ChatList>
     }
     SearchUserDirectoryResponse? userSearchResult;
     QueryPublicRoomsResponse? roomSearchResult;
+    List<BridgeSearchResult>? bridgeSearchResult;
+    var bridgeSearchErrors = <String, String>{};
     final searchQuery = searchController.text.trim();
     try {
       roomSearchResult = await client.queryPublicRooms(
@@ -257,6 +277,11 @@ class ChatListController extends State<ChatList>
         searchController.text,
         limit: 20,
       );
+      if (await BridgeRelayConfig.isConfigured()) {
+        final bridgeSearch = await _bridgeContactSearch.search(searchQuery);
+        bridgeSearchResult = bridgeSearch.results;
+        bridgeSearchErrors = bridgeSearch.errors;
+      }
     } catch (e, s) {
       Logs().w('Searching has crashed', e, s);
       if (!mounted) return;
@@ -269,6 +294,8 @@ class ChatListController extends State<ChatList>
       isSearching = false;
       this.roomSearchResult = roomSearchResult;
       this.userSearchResult = userSearchResult;
+      this.bridgeSearchResult = bridgeSearchResult;
+      this.bridgeSearchErrors = bridgeSearchErrors;
     });
   }
 
@@ -309,6 +336,8 @@ class ChatListController extends State<ChatList>
       searchController.clear();
       isSearchMode = false;
       roomSearchResult = userSearchResult = null;
+      bridgeSearchResult = null;
+      bridgeSearchErrors = {};
       isSearching = false;
     });
     if (unfocus) searchFocusNode.unfocus();
@@ -889,6 +918,12 @@ class ChatListController extends State<ChatList>
     final client = Matrix.of(context).client;
     await client.roomsLoading;
     await client.accountDataLoading;
+    // Fire-and-forget: silently merges any bridged rooms the relay is
+    // confident belong to the same address-book contact (see
+    // AutoMergeService) - needs joined rooms + this account's existing
+    // unified-contacts groupings loaded first (both awaited above), but
+    // shouldn't block the rest of first-sync UI setup below.
+    AutoMergeService.run(client);
     await client.userDeviceKeysLoading;
     if (client.prevBatch == null) {
       await client.onSyncStatus.stream.firstWhere(

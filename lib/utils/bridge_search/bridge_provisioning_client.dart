@@ -46,16 +46,35 @@ class BridgeContact {
 /// membership, cached, and read here as-is. [rooms] are Matrix room ids
 /// (mxids) - the caller still needs to check which of them this device
 /// actually has joined locally before treating it as actionable.
+///
+/// [matchedBy] is "uid" when every room came from ghosts resolved to the
+/// exact same address-book contact by its stable vCard uid - strong enough
+/// to auto-merge with zero user interaction (see AutoMergeService), which
+/// still separately checks room.isDirectChat on the human's own account
+/// before doing so (the relay can't reliably tell a 1:1 from a group chat
+/// itself - @bridgehub is a headless account with no real client
+/// maintaining that state, see suggestedGroupings.mjs). "name" means the
+/// match fell back to comparing display_name strings only (e.g. a contact
+/// with no vCard uid), which can't rule out two different contacts sharing
+/// the same name - shown for manual review in Settings > Unified Contacts
+/// instead, same as this whole feature worked before the uid distinction
+/// existed.
 class SuggestedGrouping {
   final String label;
   final List<String> rooms;
+  final String matchedBy;
 
-  SuggestedGrouping({required this.label, required this.rooms});
+  SuggestedGrouping({
+    required this.label,
+    required this.rooms,
+    this.matchedBy = 'name',
+  });
 
   factory SuggestedGrouping.fromJson(Map<String, Object?> json) =>
       SuggestedGrouping(
         label: json['label'] as String,
         rooms: (json['rooms'] as List).cast<String>(),
+        matchedBy: (json['matchedBy'] as String?) ?? 'name',
       );
 }
 
@@ -173,36 +192,36 @@ class BridgeProvisioningClient {
         .toList();
   }
 
-  /// [inviteUserId] (the app's own logged-in user) gets invited into the
-  /// resulting room after creation - bridge-created DM rooms otherwise
-  /// only have @bridgehub as a member, since that's whose token actually
-  /// authenticated the request. Caller is expected to join the room
-  /// afterward (see BridgeSearchController.startChat).
-  Future<String> resolveIdentifier(
+  /// A live reachability check for a phone number on a specific bridge -
+  /// resolve_identifier with create_chat=false, but returning the full
+  /// resolved contact (for display) instead of just a room id, and
+  /// treating "not on this network" as a clean null rather than an
+  /// exception. Confirmed via each bridge's own source (see
+  /// matrix-bridge-relay's CLAUDE.md): for WhatsApp this actually queries
+  /// IsOnWhatsApp and 404s for a number with no WhatsApp account (e.g. a
+  /// landline) - for Google Messages it's a no-op "fake success" for any
+  /// syntactically valid number, since SMS has no real reachability check
+  /// to make. This is what the address-book cross-offer step should use
+  /// instead of blindly assuming every known number works on every
+  /// phone-identifier bridge.
+  Future<BridgeContact?> checkReachable(
     String bridgeId,
     String bridgeLabel,
-    String id, {
-    bool createChat = false,
-    String? inviteUserId,
-  }) async {
-    // Encoded exactly once here - id may now be a full mxid (@user:server),
-    // which needs escaping to survive as a single path segment. The relay
-    // decodes this once and re-encodes once more on its own outbound hop -
-    // never double-encode along the way.
-    final inviteParam = inviteUserId != null
-        ? '&invite=${Uri.encodeComponent(inviteUserId)}'
-        : '';
+    String id,
+  ) async {
     final res = await http.get(
       await _uri(
-        '/bridges/$bridgeId/resolve_identifier/${Uri.encodeComponent(id)}?create_chat=$createChat$inviteParam',
+        '/bridges/$bridgeId/resolve_identifier/${Uri.encodeComponent(id)}?create_chat=false',
       ),
       headers: await _authHeaders(),
     );
+    if (res.statusCode == 404) return null;
     if (res.statusCode != 200) {
       throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
-    final json = jsonDecode(res.body) as Map<String, Object?>;
-    return json['dm_room_mxid'] as String;
+    return BridgeContact.fromJson(
+      (jsonDecode(res.body) as Map).cast(),
+    );
   }
 
   Future<String> createDm(
@@ -222,7 +241,19 @@ class BridgeProvisioningClient {
       throw BridgeProvisioningException(bridgeLabel, _errorMessage(res));
     }
     final json = jsonDecode(res.body) as Map<String, Object?>;
-    return json['dm_room_mxid'] as String;
+    final dmRoomMxid = json['dm_room_mxid'] as String?;
+    if (dmRoomMxid == null) {
+      // Defensive: a 200 with no dm_room_mxid is a real thing at least one
+      // bridge can return (confirmed on Google Messages' resolve_identifier,
+      // see git history) - fail with a clear message here too rather than
+      // risking the same unhandled type-cast crash if it ever happens on
+      // create_dm.
+      throw BridgeProvisioningException(
+        bridgeLabel,
+        'create_dm did not return a room',
+      );
+    }
+    return dmRoomMxid;
   }
 
   /// Triggers the bridge's own contact resync (e.g. WhatsApp's "sync

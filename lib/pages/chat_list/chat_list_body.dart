@@ -61,6 +61,7 @@ class ChatListViewBody extends StatelessWidget {
         .where((room) => room.roomType == 'm.space')
         .toList();
     final userSearchResult = controller.userSearchResult;
+    final bridgeSearchResult = controller.bridgeSearchResult;
     const dummyChatCount = 4;
     final filter = controller.searchController.text.toLowerCase();
     return StreamBuilder(
@@ -129,6 +130,45 @@ class ChatListViewBody extends StatelessWidget {
                             ),
                           ),
                   ),
+                  if (bridgeSearchResult != null &&
+                      bridgeSearchResult.isNotEmpty) ...[
+                    SearchTitle(
+                      title: L10n.of(context).bridgeContacts,
+                      icon: const Icon(Icons.contact_phone_outlined),
+                    ),
+                    ...bridgeSearchResult.map(
+                      (result) => ListTile(
+                        leading: Avatar(
+                          mxContent: null,
+                          name: result.displayName,
+                        ),
+                        title: Text(result.displayName),
+                        subtitle: Text(result.bridge.label),
+                        onTap: () => controller.startBridgeChat(result),
+                      ),
+                    ),
+                  ],
+                  if (controller.bridgeSearchErrors.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: controller.bridgeSearchErrors.entries
+                            .map(
+                              (e) => Text(
+                                '${e.key}: ${e.value}',
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
                 ],
                 if (client.rooms.isNotEmpty && !controller.isSearchMode)
                   Container(
