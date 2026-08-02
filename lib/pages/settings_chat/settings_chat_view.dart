@@ -121,17 +121,6 @@ class SettingsChatView extends StatelessWidget {
                 ),
               ),
               ListTile(
-                title: const Text('Search bridge contacts'),
-                subtitle: const Text(
-                  'Search WhatsApp/Google Messages contacts and start a chat, instead of using the bridge Management Room commands',
-                ),
-                onTap: () => context.go('/rooms/search_contacts'),
-                trailing: const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Icon(Icons.chevron_right_outlined),
-                ),
-              ),
-              ListTile(
                 title: const Text('Bridge Search settings'),
                 subtitle: const Text(
                   'Configure the matrix-bridge-relay connection used for bridge contact search',
